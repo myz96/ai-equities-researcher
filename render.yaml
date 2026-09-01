@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: bryan-capital
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: free
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: MODEL_NAME
+        value: anthropic/claude-sonnet-5
+      - key: MODEL_PROVIDER
+        value: OpenRouter
+      - key: DATA_PROVIDER
+        value: yfinance
+      - key: SITE_NAME
+        value: Bryan Capital
+      - key: SITE_TAGLINE
+        value: The investment committee of legends
+      - key: BIRTHDAY_MESSAGE
+        value: "Happy birthday, Bryan! Fourteen legendary investors now work for you. 🎂"
