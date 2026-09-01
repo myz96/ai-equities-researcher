@@ -1,7 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import base64
 import logging
 import asyncio
+import os
+import secrets
+from pathlib import Path
+
+from fastapi import Request, Response
 
 from app.backend.routes import api_router
 from app.backend.database.connection import engine
@@ -26,8 +33,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Optional password gate for public deployments. Set APP_PASSWORD to enable;
+# any username works, the password must match.
+_app_password = os.environ.get("APP_PASSWORD")
+
+
+@app.middleware("http")
+async def basic_auth(request: Request, call_next):
+    if not _app_password:
+        return await call_next(request)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth[6:]).decode()
+            _, _, password = decoded.partition(":")
+            if secrets.compare_digest(password, _app_password):
+                return await call_next(request)
+        except Exception:
+            pass
+    return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="analyst"'})
+
+
 # Include all routes
 app.include_router(api_router)
+
+
+@app.get("/site-config")
+def site_config():
+    """Personalization for the report UI, driven by environment variables."""
+    return {
+        "site_name": os.environ.get("SITE_NAME", "AI Equity Analyst"),
+        "tagline": os.environ.get("SITE_TAGLINE", "The investment committee of legends"),
+        "birthday_message": os.environ.get("BIRTHDAY_MESSAGE", ""),
+    }
+
+
+# Serve the report UI (registered after the API routes, so they take precedence)
+_web_dir = Path(__file__).resolve().parents[2] / "web"
+if _web_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="web")
 
 @app.on_event("startup")
 async def startup_event():

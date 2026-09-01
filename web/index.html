@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Equity Analyst</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+</head>
+<body>
+  <div id="birthday-banner" class="banner hidden">
+    <span id="birthday-text"></span>
+    <button id="banner-close" aria-label="Close">✕</button>
+  </div>
+
+  <header class="masthead">
+    <h1 id="site-name">AI Equity Analyst</h1>
+    <p id="site-tagline" class="tagline">The investment committee of legends</p>
+  </header>
+
+  <main>
+    <form id="search-form" class="search-row" autocomplete="off">
+      <input id="ticker-input" type="text" placeholder="Ticker — e.g. AAPL, NVDA, BHP.AX"
+             spellcheck="false" required pattern="[A-Za-z0-9.\-]{1,12}" />
+      <button id="analyze-btn" type="submit">Convene the committee</button>
+    </form>
+    <div class="model-row">
+      <label for="model-select">Committee brain</label>
+      <select id="model-select"></select>
+      <span id="cost-line" class="cost-line"></span>
+    </div>
+
+    <section id="progress-section" class="hidden">
+      <h2 class="section-title">The committee is deliberating<span class="ellipsis"></span></h2>
+      <div id="progress-grid" class="progress-grid"></div>
+    </section>
+
+    <section id="error-section" class="hidden">
+      <div class="error-card"><span id="error-text"></span></div>
+    </section>
+
+    <section id="report-section" class="hidden">
+      <div class="report-header">
+        <h2 id="report-title" class="report-title"></h2>
+        <p id="report-meta" class="report-meta"></p>
+      </div>
+
+      <div id="decision-hero" class="decision-hero"></div>
+
+      <div class="consensus-block">
+        <h3 class="section-title">Committee vote</h3>
+        <div id="consensus-meter" class="consensus-meter" role="img"></div>
+        <div id="consensus-legend" class="consensus-legend"></div>
+      </div>
+
+      <div id="debate-block" class="debate-block"></div>
+
+      <h3 class="section-title">The investors</h3>
+      <div id="persona-grid" class="card-grid"></div>
+
+      <h3 class="section-title">Quant models</h3>
+      <div id="quant-grid" class="card-grid"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>For education only. Nothing here is financial advice. The committee is artificial;
+       the losses would be real.</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

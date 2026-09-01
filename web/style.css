@@ -1,0 +1,199 @@
+/* Committed dark theme. Tokens follow the validated reference palette
+   (dark surface #1a1a19): status good/critical carry bullish/bearish,
+   always paired with an icon + label, never color alone. */
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #222220;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --hairline: rgba(255, 255, 255, 0.10);
+  --grid: #2c2c2a;
+  --accent: #3987e5;
+  --accent-track: #104281;
+  --bull: #0ca30c;
+  --bear: #d03b3b;
+  --gold: #c9a24b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink-2);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+
+main { max-width: 980px; margin: 0 auto; padding: 0 20px 64px; }
+
+.hidden { display: none !important; }
+
+/* Birthday banner */
+.banner {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  background: linear-gradient(90deg, #2a2214, #1a1a19);
+  border-bottom: 1px solid var(--gold);
+  color: var(--gold);
+  padding: 12px 20px; text-align: center; font-size: 15px;
+}
+.banner button {
+  background: none; border: none; color: var(--gold); cursor: pointer; font-size: 14px;
+}
+
+/* Masthead */
+.masthead { text-align: center; padding: 56px 20px 8px; }
+.masthead h1 {
+  margin: 0; color: var(--ink); font-size: 40px; letter-spacing: 0.01em; font-weight: 650;
+}
+.tagline { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
+
+/* Search */
+.search-row { display: flex; gap: 10px; justify-content: center; padding: 28px 0 8px; }
+#ticker-input {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 12px 16px; font-size: 17px; width: min(340px, 60vw);
+  text-transform: uppercase;
+}
+#ticker-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+#analyze-btn {
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 12px 18px; font-size: 16px; font-weight: 600; cursor: pointer;
+}
+#analyze-btn:hover { filter: brightness(1.1); }
+#analyze-btn:disabled { background: var(--grid); color: var(--muted); cursor: wait; }
+
+/* Model picker + cost line */
+.model-row {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-size: 13px; color: var(--muted); padding-bottom: 8px; flex-wrap: wrap;
+}
+#model-select {
+  background: var(--surface); color: var(--ink-2);
+  border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 8px; font-size: 13px;
+}
+.cost-line { color: var(--muted); }
+
+/* Sections */
+.section-title {
+  color: var(--ink); font-size: 18px; font-weight: 650;
+  margin: 36px 0 14px;
+}
+
+/* Progress */
+.progress-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;
+}
+.progress-chip {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 9px 12px; font-size: 14px;
+}
+.progress-chip .who { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.progress-chip .status {
+  color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.progress-chip.done .status { color: var(--bull); }
+.progress-chip.failed .status { color: var(--bear); }
+.ellipsis::after {
+  content: "…"; animation: pulse 1.2s infinite;
+}
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+/* Error */
+.error-card {
+  background: var(--surface); border: 1px solid var(--bear); border-radius: 10px;
+  color: var(--ink); padding: 14px 18px; margin-top: 24px;
+}
+
+/* Report header */
+.report-header { margin-top: 40px; }
+.report-title { color: var(--ink); font-size: 30px; margin: 0; }
+.report-meta { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+
+/* Decision hero */
+.decision-hero {
+  display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px;
+  padding: 22px 26px; margin-top: 18px;
+}
+.decision-hero .action { font-size: 48px; font-weight: 700; color: var(--ink); }
+.decision-hero .action.bullish { color: var(--bull); }
+.decision-hero .action.bearish { color: var(--bear); }
+.decision-hero .sub { color: var(--ink-2); font-size: 15px; }
+.decision-hero .rationale { flex-basis: 100%; color: var(--ink-2); margin: 4px 0 0; font-size: 15px; }
+
+/* Consensus meter — stacked bar, 2px surface gaps, 4px rounded ends */
+.consensus-meter {
+  display: flex; height: 16px; border-radius: 4px; overflow: hidden;
+  background: var(--grid); gap: 2px;
+}
+.consensus-meter .seg { height: 100%; }
+.consensus-meter .seg.bull { background: var(--bull); }
+.consensus-meter .seg.neutral { background: var(--muted); }
+.consensus-meter .seg.bear { background: var(--bear); }
+.consensus-legend { display: flex; gap: 22px; margin-top: 10px; font-size: 14px; }
+.consensus-legend .key { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.consensus-legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* Debate block */
+.debate-block { margin-top: 36px; }
+.debate-card {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-left: 3px solid var(--gold); border-radius: 12px; padding: 18px 22px;
+}
+.debate-card h4 { margin: 0 0 6px; color: var(--gold); font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; }
+.debate-card p { margin: 0; color: var(--ink-2); }
+.disagreements { display: grid; gap: 10px; margin-top: 14px; }
+.disagreement {
+  background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 12px 16px;
+}
+.disagreement .topic { color: var(--ink); font-weight: 650; margin-bottom: 6px; }
+.disagreement .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 14px; }
+.disagreement .side b { display: block; margin-bottom: 2px; }
+.disagreement .side.bull b { color: var(--bull); }
+.disagreement .side.bear b { color: var(--bear); }
+.verdict { margin-top: 14px; color: var(--ink-2); font-size: 14px; }
+.verdict b { color: var(--ink); }
+@media (max-width: 640px) { .disagreement .sides { grid-template-columns: 1fr; } }
+
+/* Analyst cards */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.analyst-card {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 8px;
+}
+.analyst-card .head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.analyst-card .name { color: var(--ink); font-weight: 650; font-size: 16px; }
+.analyst-card .epithet { color: var(--muted); font-size: 13px; margin-top: 1px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--hairline); color: var(--ink-2);
+}
+.badge.bullish { color: var(--bull); border-color: var(--bull); }
+.badge.bearish { color: var(--bear); border-color: var(--bear); }
+/* Confidence meter: accent fill on a darker step of the same ramp */
+.conf-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.conf-track { flex: 1; height: 6px; border-radius: 4px; background: var(--accent-track); }
+.conf-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+.analyst-card .reasoning {
+  color: var(--ink-2); font-size: 14px; margin: 0; white-space: pre-line;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.analyst-card.expanded .reasoning { display: block; }
+.read-more {
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-size: 13px; padding: 0; text-align: left; width: fit-content;
+}
+
+footer {
+  border-top: 1px solid var(--hairline);
+  color: var(--muted); font-size: 13px; text-align: center; padding: 22px 20px 34px;
+}

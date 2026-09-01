@@ -6,7 +6,7 @@ import json
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/api")
 async def root():
     return {"message": "Welcome to AI Hedge Fund API"}
 
