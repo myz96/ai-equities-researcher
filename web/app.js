@@ -22,6 +22,8 @@ async function init() {
     $("site-name").textContent = config.site_name;
     $("site-tagline").textContent = config.tagline;
     document.title = config.site_name;
+    $("crest-mark").textContent = config.site_name
+      .split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
     if (config.birthday_message && !localStorage.getItem("birthdaySeen")) {
       $("birthday-text").textContent = config.birthday_message;
       $("birthday-banner").classList.remove("hidden");
@@ -169,12 +171,12 @@ function renderDecision(decision) {
   const cls = ["BUY", "COVER"].includes(action) ? "bullish"
     : ["SELL", "SHORT"].includes(action) ? "bearish" : "";
   hero.innerHTML = "";
-  const actionEl = el("div", `action ${cls}`, action);
+  const stampEl = el("div", `stamp ${cls}`, action);
   const subEl = el("div", "sub",
-    `${decision.confidence != null ? Math.round(decision.confidence) + "% confidence" : ""}` +
-    `${decision.quantity ? ` · ${decision.quantity} shares` : ""}`);
+    `${decision.confidence != null ? Math.round(decision.confidence) + "% CONVICTION" : ""}` +
+    `${decision.quantity ? ` · ${decision.quantity} SHARES` : ""}`);
   const rationaleEl = el("p", "rationale", decision.reasoning || "");
-  hero.append(actionEl, subEl, rationaleEl);
+  hero.append(stampEl, subEl, rationaleEl);
 }
 
 function renderConsensus(entries) {
@@ -241,8 +243,9 @@ function renderDebate(debate) {
     verdict.appendChild(document.createTextNode(debate.consensus_verdict));
     card.appendChild(verdict);
   }
-  block.appendChild(el("h3", "section-title", "The debate"));
-  block.appendChild(card);
+  const eyebrow = el("div", "eyebrow");
+  eyebrow.appendChild(el("span", "", "II · THE DEBATE"));
+  block.append(eyebrow, card);
 }
 
 function renderCards(entries) {
@@ -253,34 +256,35 @@ function renderCards(entries) {
 
   entries.sort((a, b) => (ANALYSTS[a.configKey]?.order ?? 99) - (ANALYSTS[b.configKey]?.order ?? 99));
 
+  let index = 0;
   for (const entry of entries) {
     const meta = ANALYSTS[entry.configKey] || {};
-    const card = el("div", "analyst-card");
+    const name = meta.display_name || displayName(entry.agentKey);
+    const card = el("div", `analyst-card sig-${entry.signal}`);
+    card.style.setProperty("--stagger", `${Math.min(index++, 12) * 45}ms`);
 
     const head = el("div", "head");
-    const idBlock = el("div", "");
-    idBlock.appendChild(el("div", "name", meta.display_name || displayName(entry.agentKey)));
+    const medallion = el("div", "medallion",
+      name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase());
+    const idBlock = el("div", "who");
+    idBlock.appendChild(el("div", "name", name));
     if (meta.description) idBlock.appendChild(el("div", "epithet", meta.description));
-    const badge = el("span", `badge ${entry.signal}`,
-      `${SIGNAL_ICONS[entry.signal] || ""} ${entry.signal.toUpperCase()}`);
-    head.append(idBlock, badge);
+    head.append(medallion, idBlock);
     card.appendChild(head);
 
-    const confRow = el("div", "conf-row");
-    const track = el("div", "conf-track");
-    const fill = el("div", "conf-fill");
-    fill.style.width = `${Math.min(100, Math.max(0, entry.confidence))}%`;
-    track.appendChild(fill);
-    confRow.append(track, el("span", "", `${Math.round(entry.confidence)}%`));
-    card.appendChild(confRow);
+    const signalRow = el("div", "signal-row");
+    signalRow.appendChild(el("span", `badge ${entry.signal}`,
+      `${SIGNAL_ICONS[entry.signal] || ""} ${entry.signal.toUpperCase()}`));
+    signalRow.appendChild(el("span", "conf", `${Math.round(entry.confidence)}% conviction`));
+    card.appendChild(signalRow);
 
     const reasoning = el("p", "reasoning", entry.reasoning);
     card.appendChild(reasoning);
     if ((entry.reasoning || "").length > 260) {
-      const btn = el("button", "read-more", "Read more");
+      const btn = el("button", "read-more", "Read the view");
       btn.addEventListener("click", () => {
         const expanded = card.classList.toggle("expanded");
-        btn.textContent = expanded ? "Show less" : "Read more";
+        btn.textContent = expanded ? "Fold away" : "Read the view";
       });
       card.appendChild(btn);
     }

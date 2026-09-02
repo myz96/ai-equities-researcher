@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Equity Analyst</title>
+  <title>Terliatian Capital</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2210%22 fill=%22%230E1110%22/><text x=%2232%22 y=%2243%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%23C09A4F%22 font-family=%22Georgia,serif%22>TC</text></svg>" />
 </head>
 <body>
   <div id="birthday-banner" class="banner hidden">
@@ -14,23 +17,28 @@
   </div>
 
   <header class="masthead">
-    <h1 id="site-name">AI Equity Analyst</h1>
+    <div class="crest" aria-hidden="true"><span id="crest-mark">TC</span></div>
+    <h1 id="site-name">Terliatian Capital</h1>
     <p id="site-tagline" class="tagline">The investment committee of legends</p>
+    <div class="masthead-rule" aria-hidden="true"><span>EST. MMXXVI</span></div>
   </header>
 
   <main>
-    <form id="search-form" class="search-row" autocomplete="off">
-      <input id="ticker-input" type="text" placeholder="Ticker — e.g. AAPL, NVDA, BHP.AX"
-             spellcheck="false" required pattern="[A-Za-z0-9.\-]{1,12}" />
-      <button id="analyze-btn" type="submit">Convene the committee</button>
-    </form>
-    <div class="model-row">
-      <label for="model-select">Committee brain</label>
-      <select id="model-select"></select>
-      <span id="cost-line" class="cost-line"></span>
-    </div>
+    <section class="console">
+      <form id="search-form" class="search-row" autocomplete="off">
+        <input id="ticker-input" type="text" placeholder="AAPL · NVDA · BHP.AX"
+               spellcheck="false" required pattern="[A-Za-z0-9.\-]{1,12}" aria-label="Ticker" />
+        <button id="analyze-btn" type="submit">Convene the committee</button>
+      </form>
+      <div class="model-row">
+        <label for="model-select">Committee brain</label>
+        <select id="model-select"></select>
+        <span id="cost-line" class="cost-line"></span>
+      </div>
+    </section>
 
     <section id="progress-section" class="hidden">
+      <div class="eyebrow"><span>IN SESSION</span></div>
       <h2 class="section-title">The committee is deliberating<span class="ellipsis"></span></h2>
       <div id="progress-grid" class="progress-grid"></div>
     </section>
@@ -41,6 +49,7 @@
 
     <section id="report-section" class="hidden">
       <div class="report-header">
+        <div class="eyebrow"><span>MINUTES OF THE COMMITTEE</span></div>
         <h2 id="report-title" class="report-title"></h2>
         <p id="report-meta" class="report-meta"></p>
       </div>
@@ -48,24 +57,24 @@
       <div id="decision-hero" class="decision-hero"></div>
 
       <div class="consensus-block">
-        <h3 class="section-title">Committee vote</h3>
+        <div class="eyebrow"><span>I · THE VOTE</span></div>
         <div id="consensus-meter" class="consensus-meter" role="img"></div>
         <div id="consensus-legend" class="consensus-legend"></div>
       </div>
 
       <div id="debate-block" class="debate-block"></div>
 
-      <h3 class="section-title">The investors</h3>
+      <div class="eyebrow"><span>III · THE INVESTORS</span></div>
       <div id="persona-grid" class="card-grid"></div>
 
-      <h3 class="section-title">Quant models</h3>
+      <div class="eyebrow"><span>IV · THE QUANT DESK</span></div>
       <div id="quant-grid" class="card-grid"></div>
     </section>
   </main>
 
   <footer>
-    <p>For education only. Nothing here is financial advice. The committee is artificial;
-       the losses would be real.</p>
+    <p>For education only. Nothing here is financial advice.
+       The committee is artificial; the losses would be real.</p>
   </footer>
 
   <script src="/app.js"></script>
