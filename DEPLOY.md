@@ -38,7 +38,7 @@ Steps (`render.yaml` in the repo root configures everything):
 3. New → Blueprint → pick the repo. Render reads `render.yaml`.
 4. Enter the two secrets when prompted: `OPENROUTER_API_KEY` and
    `APP_PASSWORD`.
-5. Deploy. The site appears at `https://bryan-capital.onrender.com`.
+5. Deploy. The site appears at `https://terliatian-capital.onrender.com`.
 
 Free-tier caveat: the container sleeps after ~15 minutes without traffic.
 The first visit after a sleep takes ~1 minute to wake. For a gift this is

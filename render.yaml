@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bryan-capital
+    name: terliatian-capital
     runtime: docker
     dockerfilePath: ./Dockerfile.web
     plan: free
@@ -16,7 +16,7 @@ services:
       - key: DATA_PROVIDER
         value: yfinance
       - key: SITE_NAME
-        value: Bryan Capital
+        value: Terliatian Capital
       - key: SITE_TAGLINE
         value: The investment committee of legends
       - key: BIRTHDAY_MESSAGE
