@@ -427,9 +427,19 @@ footer {
 footer p { margin: 0; }
 
 @media (max-width: 860px) {
-  .shell { flex-direction: column; }
-  .rail { width: 100%; border-right: none; border-bottom: 1px solid var(--hairline); padding-bottom: 10px; }
-  .wordmark { display: none; }
+  /* One naturally scrolling document on small screens — no inner panes. */
+  html, body { height: auto; }
+  .shell { flex-direction: column; min-height: 0; }
+  .rail { width: 100%; border-right: none; border-bottom: 1px solid var(--hairline); padding-bottom: 10px; overflow: visible; }
+  .stage { overflow: visible; }
+  .topbar { position: static; }
   .watch-table .twr { grid-template-columns: 84px 90px 70px 1fr; }
   .twr .c-a { display: none; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px 14px; }
+  .command { order: 3; flex-basis: 100%; max-width: none; margin: 0; }
+  .command-hint { display: none; }
+  .topbar-right { margin-left: auto; }
+  #model-select { max-width: 130px; }
 }
