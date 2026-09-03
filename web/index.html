@@ -16,65 +16,45 @@
     <button id="banner-close" aria-label="Close">✕</button>
   </div>
 
-  <header class="masthead">
-    <div class="crest" aria-hidden="true"><span id="crest-mark">TC</span></div>
-    <h1 id="site-name">Terliatian Capital</h1>
-    <p id="site-tagline" class="tagline">The investment committee of legends</p>
-    <div class="masthead-rule" aria-hidden="true"><span>EST. MMXXVI</span></div>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <span class="crest" aria-hidden="true"><span id="crest-mark">TC</span></span>
+      <span id="site-name" class="wordmark">Terliatian Capital</span>
+    </a>
+    <form id="search-form" class="command" autocomplete="off">
+      <span class="command-hint" aria-hidden="true">/</span>
+      <input id="ticker-input" type="text" placeholder="Ticker — AAPL, NVDA, BHP.AX"
+             spellcheck="false" required pattern="[A-Za-z0-9.\-^]{1,12}" aria-label="Ticker" />
+      <button id="analyze-btn" type="submit">Convene</button>
+    </form>
+    <div class="topbar-right">
+      <select id="model-select" aria-label="Committee brain"></select>
+      <span id="cost-line" class="cost-line"></span>
+    </div>
   </header>
 
-  <main>
-    <section class="console">
-      <form id="search-form" class="search-row" autocomplete="off">
-        <input id="ticker-input" type="text" placeholder="AAPL · NVDA · BHP.AX"
-               spellcheck="false" required pattern="[A-Za-z0-9.\-]{1,12}" aria-label="Ticker" />
-        <button id="analyze-btn" type="submit">Convene the committee</button>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-head">
+        <span>Watchlist</span>
+        <button id="watch-add" title="Add ticker" aria-label="Add ticker to watchlist">+</button>
+      </div>
+      <form id="watch-form" class="watch-form hidden">
+        <input id="watch-input" type="text" placeholder="Add ticker" spellcheck="false"
+               pattern="[A-Za-z0-9.\-]{1,12}" aria-label="Ticker to add" />
       </form>
-      <div class="model-row">
-        <label for="model-select">Committee brain</label>
-        <select id="model-select"></select>
-        <span id="cost-line" class="cost-line"></span>
-      </div>
-    </section>
+      <nav id="watchlist" class="watchlist" aria-label="Watchlist"></nav>
+      <div class="rail-head library-head"><span>Library</span></div>
+      <nav id="library" class="library" aria-label="Research library"></nav>
+    </aside>
 
-    <section id="progress-section" class="hidden">
-      <div class="eyebrow"><span>IN SESSION</span></div>
-      <h2 class="section-title">The committee is deliberating<span class="ellipsis"></span></h2>
-      <div id="progress-grid" class="progress-grid"></div>
-    </section>
-
-    <section id="error-section" class="hidden">
-      <div class="error-card"><span id="error-text"></span></div>
-    </section>
-
-    <section id="report-section" class="hidden">
-      <div class="report-header">
-        <div class="eyebrow"><span>MINUTES OF THE COMMITTEE</span></div>
-        <h2 id="report-title" class="report-title"></h2>
-        <p id="report-meta" class="report-meta"></p>
-      </div>
-
-      <div id="decision-hero" class="decision-hero"></div>
-
-      <div class="consensus-block">
-        <div class="eyebrow"><span>I · THE VOTE</span></div>
-        <div id="consensus-meter" class="consensus-meter" role="img"></div>
-        <div id="consensus-legend" class="consensus-legend"></div>
-      </div>
-
-      <div id="debate-block" class="debate-block"></div>
-
-      <div class="eyebrow"><span>III · THE INVESTORS</span></div>
-      <div id="persona-grid" class="card-grid"></div>
-
-      <div class="eyebrow"><span>IV · THE QUANT DESK</span></div>
-      <div id="quant-grid" class="card-grid"></div>
-    </section>
-  </main>
+    <main id="stage" class="stage" aria-live="polite"></main>
+  </div>
 
   <footer>
-    <p>For education only. Nothing here is financial advice.
-       The committee is artificial; the losses would be real.</p>
+    <p id="site-tagline-holder"><span id="site-tagline">The investment committee of legends</span> ·
+      For education only. Nothing here is financial advice.
+      The committee is artificial; the losses would be real.</p>
   </footer>
 
   <script src="/app.js"></script>
