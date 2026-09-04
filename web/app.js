@@ -17,29 +17,63 @@ let ANALYSTS = {};
 let runningTicker = null;
 const quoteCache = {}; // symbol -> quote
 
-/* ---------- persistence ---------- */
+/* ---------- persistence (server-backed; Neon Postgres behind the API) ---------- */
+let watchlistArr = DEFAULT_WATCHLIST.slice();
+let notesIndex = []; // newest-first summaries from /desk/notes
+const noteCache = {}; // id -> full payload
+
 const store = {
-  get watchlist() {
-    try { return JSON.parse(localStorage.getItem("tc_watchlist")) || DEFAULT_WATCHLIST.slice(); }
-    catch { return DEFAULT_WATCHLIST.slice(); }
-  },
-  set watchlist(list) { localStorage.setItem("tc_watchlist", JSON.stringify(list)); },
-  get reports() {
-    try { return JSON.parse(localStorage.getItem("tc_reports")) || {}; }
-    catch { return {}; }
-  },
-  saveReport(ticker, data) {
-    const reports = store.reports;
-    reports[ticker] = { data, ts: Date.now() };
-    localStorage.setItem("tc_reports", JSON.stringify(reports));
+  get watchlist() { return watchlistArr; },
+  set watchlist(list) {
+    watchlistArr = list;
+    fetch("/desk/state/watchlist", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: list }),
+    }).catch(() => {});
   },
 };
+
+function latestNote(ticker) {
+  return notesIndex.find((n) => n.ticker === ticker) || null;
+}
+
+async function loadDeskData() {
+  const [wl, notes] = await Promise.all([
+    fetch("/desk/state/watchlist").then((r) => r.json()).catch(() => null),
+    fetch("/desk/notes").then((r) => r.json()).catch(() => []),
+  ]);
+  if (wl && Array.isArray(wl.value)) watchlistArr = wl.value;
+  notesIndex = notes || [];
+}
+
+async function migrateLocalIfNeeded() {
+  if (localStorage.getItem("tc_migrated")) return;
+  let reports = null, wl = null;
+  try { reports = JSON.parse(localStorage.getItem("tc_reports")); } catch {}
+  try { wl = JSON.parse(localStorage.getItem("tc_watchlist")); } catch {}
+  if (reports || wl) {
+    await fetch("/desk/import", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: Object.values(reports || {}), watchlist: wl || undefined }),
+    }).catch(() => {});
+  }
+  localStorage.setItem("tc_migrated", "1");
+}
+
+async function fetchNoteFull(id) {
+  if (noteCache[id]) return noteCache[id];
+  const res = await fetch(`/desk/notes/${id}`).then((r) => r.json());
+  noteCache[id] = res;
+  return res;
+}
 
 /* ---------- boot ---------- */
 init();
 
 async function init() {
   try {
+    await migrateLocalIfNeeded();
+    await loadDeskData();
     const [config, analysts, models, usage] = await Promise.all([
       fetch("/site-config").then((r) => r.json()),
       fetch("/analyze/analysts").then((r) => r.json()),
@@ -155,20 +189,25 @@ function renderRail() {
 
   const lib = $("library");
   lib.innerHTML = "";
-  const entries = Object.entries(store.reports).sort((a, b) => b[1].ts - a[1].ts);
-  for (const [t, rec] of entries.slice(0, 12)) {
-    const row = el("a", "lib-row" + (route.view === "ticker" && route.ticker === t ? " active" : ""));
-    row.href = `#/t/${t}`;
-    row.appendChild(el("span", "lt", t));
-    row.appendChild(verdictChip(rec.data));
-    row.appendChild(el("span", "ld", shortDate(rec.ts)));
+  const latest = dedupeByTicker(notesIndex);
+  for (const n of latest.slice(0, 12)) {
+    const row = el("a", "lib-row" + (route.view === "ticker" && route.ticker === n.ticker ? " active" : ""));
+    row.href = `#/t/${n.ticker}`;
+    row.appendChild(el("span", "lt", n.ticker));
+    row.appendChild(actionChip(n.action));
+    row.appendChild(el("span", "ld", shortDate(n.created_at)));
     lib.appendChild(row);
   }
-  if (!entries.length) lib.appendChild(el("div", "rail-empty", "No notes yet."));
+  if (!latest.length) lib.appendChild(el("div", "rail-empty", "No notes yet."));
 }
 
-function verdictChip(data) {
-  const action = String(decisionOf(data).action || "—").toUpperCase();
+function dedupeByTicker(index) {
+  const seen = new Set();
+  return index.filter((n) => (seen.has(n.ticker) ? false : (seen.add(n.ticker), true)));
+}
+
+function actionChip(action) {
+  action = String(action || "—").toUpperCase();
   const cls = ["BUY", "COVER"].includes(action) ? "bullish" : ["SELL", "SHORT"].includes(action) ? "bearish" : "";
   return el("span", `verdict-chip ${cls}`, action);
 }
@@ -229,26 +268,25 @@ function renderDesk() {
   stage.appendChild(table);
 
   stage.appendChild(eyebrow("THE LIBRARY"));
-  const entries = Object.entries(store.reports).sort((a, b) => b[1].ts - a[1].ts);
-  if (!entries.length) {
+  const latest = dedupeByTicker(notesIndex);
+  if (!latest.length) {
     const empty = el("div", "desk-empty");
     empty.innerHTML = "No research on file. Type a ticker above — or press <b>/</b> — and convene the committee for its first note.";
     stage.appendChild(empty);
   } else {
     const grid = el("div", "lib-grid");
     let s = 0;
-    for (const [t, rec] of entries) {
+    for (const n of latest) {
       const card = el("a", "lib-card");
       card.style.setProperty("--stagger", `${Math.min(s++, 8) * 50}ms`);
-      card.href = `#/t/${t}`;
+      card.href = `#/t/${n.ticker}`;
       const row1 = el("div", "row1");
-      row1.appendChild(el("span", "t", t));
-      row1.appendChild(verdictChip(rec.data));
+      row1.appendChild(el("span", "t", n.ticker));
+      row1.appendChild(actionChip(n.action));
       card.appendChild(row1);
       card.appendChild(el("div", "meta",
-        `${shortDate(rec.ts)} · ${String(rec.data.model_name || "").split("/").pop()}`));
-      const thesis = decisionOf(rec.data).reasoning;
-      if (thesis) card.appendChild(el("p", "thesis", thesis));
+        `${shortDate(n.created_at)} · ${String(n.model_name || "").split("/").pop()}`));
+      if (n.thesis) card.appendChild(el("p", "thesis", n.thesis));
       grid.appendChild(card);
     }
     stage.appendChild(grid);
@@ -271,11 +309,14 @@ async function renderTickerPage(ticker) {
   stage.appendChild(head);
 
   const chartPanel = el("div", "chart-panel");
+  const loading = el("div", "rail-empty", "Loading the tape…");
+  chartPanel.appendChild(loading);
   stage.appendChild(chartPanel);
 
   const noteHost = el("div", "");
   stage.appendChild(noteHost);
-  renderNoteInto(noteHost, ticker);
+  await renderNoteInto(noteHost, ticker);
+  if (currentRoute().ticker !== ticker) return;
 
   const [quotes, priceData] = await Promise.all([
     quoteCache[ticker] ? Promise.resolve([quoteCache[ticker]]) : fetchQuotes([ticker]),
@@ -291,18 +332,19 @@ async function renderTickerPage(ticker) {
   if (priceData && priceData.prices && priceData.prices.length > 1) {
     drawBigChart(chartPanel, priceData.prices);
   } else {
+    chartPanel.innerHTML = "";
     chartPanel.appendChild(el("div", "rail-empty", "No price history found for this ticker."));
   }
 }
 
-function renderNoteInto(host, ticker) {
+async function renderNoteInto(host, ticker) {
   host.innerHTML = "";
   if (runningTicker === ticker) {
     host.appendChild(sessionView());
     return;
   }
-  const rec = store.reports[ticker];
-  if (!rec) {
+  const summary = latestNote(ticker);
+  if (!summary) {
     const box = el("div", "no-note");
     box.appendChild(el("p", "", "The committee holds no note on this name."));
     const btn = el("button", "btn-brass", "Convene the committee");
@@ -311,7 +353,12 @@ function renderNoteInto(host, ticker) {
     host.appendChild(box);
     return;
   }
-  host.appendChild(noteView(rec));
+  const full = await fetchNoteFull(summary.id).catch(() => null);
+  if (!full) {
+    host.appendChild(el("div", "error-card", "Could not load the note."));
+    return;
+  }
+  host.appendChild(noteView(full));
 }
 
 /* ---------- session ---------- */
@@ -363,8 +410,15 @@ async function runAnalysis(ticker) {
     await consumeSSE(response.body, {
       progress: onProgress,
       complete: (event) => {
-        store.saveReport(ticker, event.data);
-        renderCost(event.data.run_cost, event.data.usage);
+        const d = event.data;
+        const decision = decisionOf(d);
+        notesIndex.unshift({
+          id: d.note_id, ticker: d.ticker, created_at: new Date().toISOString(),
+          model_name: d.model_name, run_cost: d.run_cost,
+          action: decision.action, confidence: decision.confidence, thesis: decision.reasoning,
+        });
+        if (d.note_id != null) noteCache[d.note_id] = { id: d.note_id, ticker: d.ticker, created_at: new Date().toISOString(), run_cost: d.run_cost, data: d };
+        renderCost(d.run_cost, d.usage);
       },
       error: (event) => { throw new Error(event.message); },
     });
@@ -473,10 +527,11 @@ function noteView(rec) {
   rail.appendChild(quantGrid);
   rail.appendChild(eyebrow("THE RECORD"));
   const meta = el("div", "meta-card");
-  metaRow(meta, "Note dated", shortDate(rec.ts));
+  metaRow(meta, "Note dated", shortDate(rec.created_at || Date.now()));
   metaRow(meta, "Window", `${data.start_date} → ${data.end_date}`);
   metaRow(meta, "Brain", String(data.model_name || "").split("/").pop());
-  if (data.run_cost != null) metaRow(meta, "Cost", `$${data.run_cost.toFixed(2)}`);
+  const cost = rec.run_cost ?? data.run_cost;
+  if (cost != null) metaRow(meta, "Cost", `$${Number(cost).toFixed(2)}`);
   rail.appendChild(meta);
 
   renderPlaques(entries, personaGrid, quantGrid);

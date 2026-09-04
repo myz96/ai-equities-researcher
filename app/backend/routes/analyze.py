@@ -8,7 +8,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.backend.database.connection import SessionLocal
 from app.backend.models.events import CompleteEvent, ErrorEvent, ProgressUpdateEvent, StartEvent
+from app.backend.routes.desk import save_note
 from app.backend.services.graph import parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.llm.models import AVAILABLE_MODELS
@@ -162,18 +164,26 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
             if usage_before and usage_after and usage_before.get("used") is not None and usage_after.get("used") is not None:
                 run_cost = max(0.0, usage_after["used"] - usage_before["used"])
 
-            yield CompleteEvent(
-                data={
-                    "ticker": ticker,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "model_name": model_name,
-                    "run_cost": run_cost,
-                    "usage": usage_after,
-                    "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
-                    "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
-                }
-            ).to_sse()
+            note_data = {
+                "ticker": ticker,
+                "start_date": start_date,
+                "end_date": end_date,
+                "model_name": model_name,
+                "run_cost": run_cost,
+                "usage": usage_after,
+                "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
+                "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
+            }
+            try:
+                db = SessionLocal()
+                try:
+                    note_data["note_id"] = save_note(db, note_data)
+                finally:
+                    db.close()
+            except Exception as e:
+                print(f"Failed to persist note: {e}")
+
+            yield CompleteEvent(data=note_data).to_sse()
 
         except asyncio.CancelledError:
             return

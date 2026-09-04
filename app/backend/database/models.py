@@ -113,3 +113,34 @@ class ApiKey(Base):
 
 
  
+
+class DeskNote(Base):
+    """A committee note (one analysis run), kept forever for track records."""
+    __tablename__ = "desk_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    ticker = Column(String(16), nullable=False, index=True)
+    model_name = Column(String(120), nullable=True)
+    run_cost = Column(JSON, nullable=True)  # float or null
+    data = Column(JSON, nullable=False)  # the full complete-event payload
+
+
+class DeskPersona(Base):
+    """A custom committee member authored by the user."""
+    __tablename__ = "desk_personas"
+
+    id = Column(String(64), primary_key=True)  # slug
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    name = Column(String(80), nullable=False)
+    epithet = Column(String(120), nullable=True)
+    philosophy = Column(Text, nullable=False)
+
+
+class DeskState(Base):
+    """Small key/value state: watchlist, benched members."""
+    __tablename__ = "desk_state"
+
+    key = Column(String(40), primary_key=True)
+    value = Column(JSON, nullable=False)

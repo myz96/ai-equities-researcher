@@ -10,6 +10,7 @@ from app.backend.routes.language_models import router as language_models_router
 from app.backend.routes.api_keys import router as api_keys_router
 from app.backend.routes.analyze import router as analyze_router
 from app.backend.routes.market import router as market_router
+from app.backend.routes.desk import router as desk_router
 
 # Main API router
 api_router = APIRouter()
@@ -25,3 +26,4 @@ api_router.include_router(language_models_router, tags=["language-models"])
 api_router.include_router(api_keys_router, tags=["api-keys"])
 api_router.include_router(analyze_router)
 api_router.include_router(market_router)
+api_router.include_router(desk_router)
