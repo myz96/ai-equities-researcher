@@ -61,10 +61,19 @@ async def usage():
     return await asyncio.to_thread(_openrouter_usage) or {"used": None, "limit": None}
 
 
+class CustomPersona(BaseModel):
+    id: str
+    name: str
+    epithet: str = ""
+    philosophy: str
+
+
 class AnalyzeRequest(BaseModel):
     ticker: str
     model_name: str | None = None
     model_provider: str | None = None
+    analysts: list[str] | None = None  # builtin keys; None = all
+    custom_analysts: list[CustomPersona] | None = None
 
 
 @router.get("/analysts")
@@ -96,8 +105,17 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - relativedelta(months=3)).strftime("%Y-%m-%d")
 
+    selected = None
+    if request_data.analysts is not None:
+        selected = [k for k in request_data.analysts if k in ANALYST_CONFIG]
+    customs = [p.model_dump() for p in (request_data.custom_analysts or [])][:10]
+    for p in customs:
+        p["id"] = "".join(c for c in p["id"] if c.isalnum() or c == "_")[:48] or "member"
+    if selected == [] and not customs:
+        selected = None  # never run an empty committee
+
     portfolio = create_portfolio(100000.0, 0.0, [ticker])
-    graph = create_workflow(None).compile()
+    graph = create_workflow(selected, custom_personas=customs).compile()
 
     async def wait_for_disconnect():
         while True:

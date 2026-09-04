@@ -46,6 +46,8 @@
       <nav id="watchlist" class="watchlist" aria-label="Watchlist"></nav>
       <div class="rail-head library-head"><span>Library</span></div>
       <nav id="library" class="library" aria-label="Research library"></nav>
+      <div class="rail-head library-head"><span>Manage</span></div>
+      <a id="committee-link" class="lib-row" href="#/committee"><span class="lt">The Committee</span></a>
     </aside>
 
     <main id="stage" class="stage" aria-live="polite"></main>
@@ -56,6 +58,26 @@
       For education only. Nothing here is financial advice.
       The committee is artificial; the losses would be real.</p>
   </footer>
+
+  <dialog id="persona-dialog">
+    <form id="persona-form" method="dialog">
+      <h3 id="persona-dialog-title">New member</h3>
+      <label>Name
+        <input id="persona-name" type="text" required maxlength="80" placeholder="Nancy P." />
+      </label>
+      <label>Epithet
+        <input id="persona-epithet" type="text" maxlength="120" placeholder="The Congress Whisperer" />
+      </label>
+      <label>Philosophy
+        <textarea id="persona-philosophy" required maxlength="6000" rows="8"
+          placeholder="What do they believe? What do they look at first? What makes them walk away?"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="persona-cancel" class="btn-quiet">Cancel</button>
+        <button type="submit" id="persona-save" class="btn-brass">Save member</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/app.js"></script>
 </body>

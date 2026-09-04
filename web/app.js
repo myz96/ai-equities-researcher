@@ -14,8 +14,11 @@ const SIGNAL_ICONS = { bullish: "▲", bearish: "▼", neutral: "▬" };
 const QUANT_SUFFIX = "_analyst";
 
 let ANALYSTS = {};
+let PERSONAS = []; // custom members from the server
+let BENCHED = []; // benched member keys (builtin keys or custom_<id>)
 let runningTicker = null;
 const quoteCache = {}; // symbol -> quote
+const COST_PER_MEMBER = 0.007; // measured: ~$0.13 / 19 members on Sonnet
 
 /* ---------- persistence (server-backed; Neon Postgres behind the API) ---------- */
 let watchlistArr = DEFAULT_WATCHLIST.slice();
@@ -38,12 +41,39 @@ function latestNote(ticker) {
 }
 
 async function loadDeskData() {
-  const [wl, notes] = await Promise.all([
+  const [wl, notes, personas, bench] = await Promise.all([
     fetch("/desk/state/watchlist").then((r) => r.json()).catch(() => null),
     fetch("/desk/notes").then((r) => r.json()).catch(() => []),
+    fetch("/desk/personas").then((r) => r.json()).catch(() => []),
+    fetch("/desk/state/bench").then((r) => r.json()).catch(() => null),
   ]);
   if (wl && Array.isArray(wl.value)) watchlistArr = wl.value;
   notesIndex = notes || [];
+  PERSONAS = personas || [];
+  BENCHED = (bench && bench.value) || [];
+  registerPersonaNames();
+}
+
+function registerPersonaNames() {
+  for (const p of PERSONAS) {
+    ANALYSTS[`custom_${p.id}`] = {
+      key: `custom_${p.id}`, display_name: p.name,
+      description: p.epithet, custom: true, order: 50,
+    };
+  }
+}
+
+function saveBench() {
+  fetch("/desk/state/bench", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value: BENCHED }),
+  }).catch(() => {});
+}
+
+function activeRoster() {
+  const builtins = Object.values(ANALYSTS).filter((a) => !a.custom && !BENCHED.includes(a.key)).map((a) => a.key);
+  const customs = PERSONAS.filter((p) => !BENCHED.includes(`custom_${p.id}`));
+  return { builtins, customs };
 }
 
 async function migrateLocalIfNeeded() {
@@ -125,6 +155,18 @@ async function init() {
     refreshQuotes();
   });
 
+  $("persona-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const btn = $("persona-save");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    savePersona()
+      .then(() => $("persona-dialog").close())
+      .finally(() => { btn.disabled = false; btn.textContent = "Save member"; });
+  });
+  $("persona-cancel").addEventListener("click", () => $("persona-dialog").close());
+
   window.addEventListener("hashchange", renderRoute);
   renderRail();
   renderRoute();
@@ -134,6 +176,7 @@ async function init() {
 
 /* ---------- routing ---------- */
 function currentRoute() {
+  if (location.hash.startsWith("#/committee")) return { view: "committee" };
   const m = location.hash.match(/^#\/t\/([A-Za-z0-9.\-^]+)/);
   return m ? { view: "ticker", ticker: m[1].toUpperCase() } : { view: "desk" };
 }
@@ -141,7 +184,9 @@ function currentRoute() {
 function renderRoute() {
   const route = currentRoute();
   renderRail();
+  $("committee-link").classList.toggle("active", route.view === "committee");
   if (route.view === "ticker") renderTickerPage(route.ticker);
+  else if (route.view === "committee") renderCommittee();
   else renderDesk();
 }
 
@@ -293,6 +338,139 @@ function renderDesk() {
   }
 }
 
+/* ---------- committee ---------- */
+function renderCommittee() {
+  const stage = $("stage");
+  stage.innerHTML = "";
+
+  const { builtins, customs } = activeRoster();
+  const activeCount = builtins.length + customs.length;
+
+  const head = el("div", "tkr-head");
+  head.appendChild(el("span", "tk", "The Committee"));
+  head.appendChild(el("span", "spacer"));
+  head.appendChild(el("span", "asof",
+    `${activeCount} ACTIVE · ≈ $${(activeCount * COST_PER_MEMBER).toFixed(2)} PER NOTE`));
+  stage.appendChild(head);
+
+  const sections = [
+    ["THE LEGENDS", Object.values(ANALYSTS).filter((a) => !a.custom && !a.key.endsWith("_analyst"))],
+    ["THE QUANT DESK", Object.values(ANALYSTS).filter((a) => !a.custom && a.key.endsWith("_analyst"))],
+  ];
+  for (const [title, members] of sections) {
+    stage.appendChild(eyebrow(title));
+    const grid = el("div", "card-grid");
+    members.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    for (const m of members) grid.appendChild(memberCard(m));
+    stage.appendChild(grid);
+  }
+
+  stage.appendChild(eyebrow("YOUR MEMBERS"));
+  const grid = el("div", "card-grid");
+  for (const p of PERSONAS) {
+    grid.appendChild(memberCard({
+      key: `custom_${p.id}`, display_name: p.name, description: p.epithet,
+      investing_style: p.philosophy, custom: true, persona: p,
+    }));
+  }
+  const addCard = el("button", "analyst-card add-card");
+  addCard.appendChild(el("div", "add-plus", "+"));
+  addCard.appendChild(el("div", "", "New member"));
+  addCard.addEventListener("click", () => openPersonaEditor(null));
+  grid.appendChild(addCard);
+  stage.appendChild(grid);
+}
+
+function memberCard(m) {
+  const benched = BENCHED.includes(m.key);
+  const card = el("div", "analyst-card member-card" + (benched ? " benched" : ""));
+
+  const head = el("div", "head");
+  const medallion = el("div", "medallion",
+    m.display_name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase());
+  const idBlock = el("div", "who");
+  const nameRow = el("div", "name");
+  nameRow.textContent = m.display_name;
+  if (m.custom) nameRow.appendChild(el("span", "custom-chip", "CUSTOM"));
+  idBlock.appendChild(nameRow);
+  if (m.description) idBlock.appendChild(el("div", "epithet", m.description));
+  head.append(medallion, idBlock);
+  card.appendChild(head);
+
+  if (m.investing_style) {
+    const style = el("p", "reasoning", m.investing_style);
+    card.appendChild(style);
+  }
+
+  const actions = el("div", "member-actions");
+  const toggle = el("button", "btn-quiet", benched ? "Benched" : "Active");
+  toggle.classList.toggle("toggled-off", benched);
+  toggle.addEventListener("click", () => {
+    if (BENCHED.includes(m.key)) BENCHED = BENCHED.filter((k) => k !== m.key);
+    else {
+      const { builtins, customs } = activeRoster();
+      if (builtins.length + customs.length <= 1) return; // never bench the last member
+      BENCHED = [...BENCHED, m.key];
+    }
+    saveBench();
+    renderCommittee();
+  });
+  actions.appendChild(toggle);
+
+  if (m.custom) {
+    const edit = el("button", "btn-quiet", "Edit");
+    edit.addEventListener("click", () => openPersonaEditor(m.persona));
+    const del = el("button", "btn-quiet danger", "Delete");
+    del.addEventListener("click", async () => {
+      if (!confirm(`Remove ${m.display_name} from the committee?`)) return;
+      await fetch(`/desk/personas/${m.persona.id}`, { method: "DELETE" });
+      PERSONAS = PERSONAS.filter((p) => p.id !== m.persona.id);
+      renderCommittee();
+    });
+    actions.append(edit, del);
+  } else {
+    const fork = el("button", "btn-quiet", "Fork");
+    fork.title = "Duplicate as an editable custom member";
+    fork.addEventListener("click", () => openPersonaEditor({
+      name: `${m.display_name} (fork)`, epithet: m.description || "",
+      philosophy: m.investing_style || "",
+    }));
+    actions.appendChild(fork);
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+let editingPersonaId = null;
+
+function openPersonaEditor(persona) {
+  editingPersonaId = persona && persona.id ? persona.id : null;
+  $("persona-dialog-title").textContent = editingPersonaId ? "Edit member" : "New member";
+  $("persona-name").value = persona ? persona.name : "";
+  $("persona-epithet").value = persona ? persona.epithet || "" : "";
+  $("persona-philosophy").value = persona ? persona.philosophy || "" : "";
+  $("persona-dialog").showModal();
+}
+
+async function savePersona() {
+  const body = {
+    name: $("persona-name").value.trim(),
+    epithet: $("persona-epithet").value.trim(),
+    philosophy: $("persona-philosophy").value.trim(),
+  };
+  if (!body.name || !body.philosophy) return;
+  const url = editingPersonaId ? `/desk/personas/${editingPersonaId}` : "/desk/personas";
+  const saved = await fetch(url, {
+    method: editingPersonaId ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+  if (editingPersonaId) PERSONAS = PERSONAS.map((p) => (p.id === saved.id ? saved : p));
+  else PERSONAS = [...PERSONAS, saved];
+  registerPersonaNames();
+  renderCommittee();
+}
+
 /* ---------- ticker page ---------- */
 async function renderTickerPage(ticker) {
   const stage = $("stage");
@@ -401,10 +579,16 @@ async function runAnalysis(ticker) {
   fetchQuotes([ticker]).then(() => { if (currentRoute().ticker === ticker) renderRoute(); });
 
   try {
+    const { builtins, customs } = activeRoster();
     const response = await fetch("/analyze/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticker, model_name: $("model-select").value || undefined }),
+      body: JSON.stringify({
+        ticker,
+        model_name: $("model-select").value || undefined,
+        analysts: builtins,
+        custom_analysts: customs,
+      }),
     });
     if (!response.ok) throw new Error(`Server error ${response.status}`);
     await consumeSSE(response.body, {
@@ -610,7 +794,9 @@ function renderPlaques(entries, personaGrid, quantGrid) {
     const medallion = el("div", "medallion",
       name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase());
     const idBlock = el("div", "who");
-    idBlock.appendChild(el("div", "name", name));
+    const nameEl = el("div", "name", name);
+    if (entry.configKey.startsWith("custom_")) nameEl.appendChild(el("span", "custom-chip", "CUSTOM"));
+    idBlock.appendChild(nameEl);
     if (meta.description) idBlock.appendChild(el("div", "epithet", meta.description));
     head.append(medallion, idBlock);
     card.appendChild(head);

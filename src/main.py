@@ -98,8 +98,12 @@ def start(state: AgentState):
     return state
 
 
-def create_workflow(selected_analysts=None):
-    """Create the workflow with selected analysts."""
+def create_workflow(selected_analysts=None, custom_personas=None):
+    """Create the workflow with selected analysts and optional custom personas."""
+    from functools import partial
+
+    from src.agents.custom_analyst import custom_analyst_agent
+
     workflow = StateGraph(AgentState)
     workflow.add_node("start_node", start)
 
@@ -115,14 +119,24 @@ def create_workflow(selected_analysts=None):
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
 
+    # Add user-authored committee members
+    custom_node_names = []
+    for persona in custom_personas or []:
+        node_name = f"custom_{persona['id']}_agent"
+        workflow.add_node(node_name, partial(custom_analyst_agent, agent_id=node_name, persona=persona))
+        workflow.add_edge("start_node", node_name)
+        custom_node_names.append(node_name)
+
     # Always add debate room, risk and portfolio management
     workflow.add_node("debate_room_agent", debate_room_agent)
     workflow.add_node("risk_management_agent", risk_management_agent)
     workflow.add_node("portfolio_manager", portfolio_management_agent)
 
-    # Connect selected analysts to the debate room, which challenges the consensus
+    # Connect all committee members to the debate room, which challenges the consensus
     for analyst_key in selected_analysts:
         node_name = analyst_nodes[analyst_key][0]
+        workflow.add_edge(node_name, "debate_room_agent")
+    for node_name in custom_node_names:
         workflow.add_edge(node_name, "debate_room_agent")
 
     workflow.add_edge("debate_room_agent", "risk_management_agent")
