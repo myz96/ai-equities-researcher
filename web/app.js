@@ -82,17 +82,21 @@ async function migrateLocalIfNeeded() {
   try { reports = JSON.parse(localStorage.getItem("tc_reports")); } catch {}
   try { wl = JSON.parse(localStorage.getItem("tc_watchlist")); } catch {}
   if (reports || wl) {
-    await fetch("/desk/import", {
+    // Mark migrated only after the server accepts the data; retry next visit otherwise.
+    const response = await fetch("/desk/import", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notes: Object.values(reports || {}), watchlist: wl || undefined }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (!response || !response.ok) return;
   }
   localStorage.setItem("tc_migrated", "1");
 }
 
 async function fetchNoteFull(id) {
   if (noteCache[id]) return noteCache[id];
-  const res = await fetch(`/desk/notes/${id}`).then((r) => r.json());
+  const response = await fetch(`/desk/notes/${id}`);
+  if (!response.ok) throw new Error(`Note ${id} unavailable (${response.status})`);
+  const res = await response.json();
   noteCache[id] = res;
   return res;
 }
@@ -162,7 +166,8 @@ async function init() {
     btn.disabled = true;
     btn.textContent = "Saving…";
     savePersona()
-      .then(() => $("persona-dialog").close())
+      .then((saved) => { if (saved) $("persona-dialog").close(); })
+      .catch(() => {})
       .finally(() => { btn.disabled = false; btn.textContent = "Save member"; });
   });
   $("persona-cancel").addEventListener("click", () => $("persona-dialog").close());
@@ -212,6 +217,12 @@ function renderRail() {
   const route = currentRoute();
   const wl = $("watchlist");
   wl.innerHTML = "";
+  if (runningTicker) {
+    const live = el("a", "lib-row session-row");
+    live.href = `#/t/${runningTicker}`;
+    live.appendChild(el("span", "lt", `● ${runningTicker} — in session`));
+    wl.appendChild(live);
+  }
   for (const t of store.watchlist) {
     const q = quoteCache[t];
     const row = el("a", "watch-row" + (route.view === "ticker" && route.ticker === t ? " active" : ""));
@@ -263,7 +274,6 @@ function decisionOf(data) {
 
 /* ---------- desk ---------- */
 function renderDesk() {
-  if (runningTicker) { location.hash = `#/t/${runningTicker}`; return; }
   const stage = $("stage");
   stage.innerHTML = "";
 
@@ -435,11 +445,16 @@ function memberCard(m) {
   const actions = el("div", "member-actions");
   const toggle = el("button", "btn-quiet", benched ? "Benched" : "Active");
   toggle.classList.toggle("toggled-off", benched);
+  toggle.title = "The committee needs at least one active member";
   toggle.addEventListener("click", () => {
     if (BENCHED.includes(m.key)) BENCHED = BENCHED.filter((k) => k !== m.key);
     else {
       const { builtins, customs } = activeRoster();
-      if (builtins.length + customs.length <= 1) return; // never bench the last member
+      if (builtins.length + customs.length <= 1) {
+        toggle.textContent = "Keep one active";
+        setTimeout(() => { toggle.textContent = "Active"; }, 1400);
+        return;
+      }
       BENCHED = [...BENCHED, m.key];
     }
     saveBench();
@@ -479,7 +494,9 @@ function openPersonaEditor(persona) {
   $("persona-name").value = persona ? persona.name : "";
   $("persona-epithet").value = persona ? persona.epithet || "" : "";
   $("persona-philosophy").value = persona ? persona.philosophy || "" : "";
-  $("persona-dialog").showModal();
+  const dialog = $("persona-dialog");
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", ""); // pre-15.4 Safari fallback
 }
 
 async function savePersona() {
@@ -488,17 +505,20 @@ async function savePersona() {
     epithet: $("persona-epithet").value.trim(),
     philosophy: $("persona-philosophy").value.trim(),
   };
-  if (!body.name || !body.philosophy) return;
+  if (!body.name || !body.philosophy) return false;
   const url = editingPersonaId ? `/desk/personas/${editingPersonaId}` : "/desk/personas";
-  const saved = await fetch(url, {
+  const response = await fetch(url, {
     method: editingPersonaId ? "PUT" : "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).then((r) => r.json());
+  });
+  if (!response.ok) return false;
+  const saved = await response.json();
   if (editingPersonaId) PERSONAS = PERSONAS.map((p) => (p.id === saved.id ? saved : p));
   else PERSONAS = [...PERSONAS, saved];
   registerPersonaNames();
   renderCommittee();
+  return true;
 }
 
 /* ---------- ticker page ---------- */
@@ -536,6 +556,9 @@ async function renderTickerPage(ticker) {
     px.textContent = fmtPrice(q.last);
     chg.textContent = `${q.change_pct >= 0 ? "▲" : "▼"} ${fmtPct(q.change_pct)}`;
     chg.className = "chg " + (q.change_pct >= 0 ? "up" : "dn");
+  } else {
+    px.textContent = "No market data";
+    px.style.color = "var(--ink-3)";
   }
   if (priceData && priceData.prices && priceData.prices.length > 1) {
     drawBigChart(chartPanel, priceData.prices);
@@ -561,12 +584,32 @@ async function renderNoteInto(host, ticker) {
     host.appendChild(box);
     return;
   }
-  const full = await fetchNoteFull(summary.id).catch(() => null);
+  const full = summary._local || await fetchNoteFull(summary.id).catch(() => null);
   if (!full) {
     host.appendChild(el("div", "error-card", "Could not load the note."));
     return;
   }
   host.appendChild(noteView(full));
+
+  // Older notes on this name stay reachable.
+  const others = notesIndex.filter((n) => n.ticker === ticker && n !== summary && n.id != null);
+  if (others.length) {
+    const bar = el("div", "past-notes");
+    bar.appendChild(el("span", "", "Past notes:"));
+    for (const n of others.slice(0, 8)) {
+      const chip = el("button", "btn-quiet", `${shortDate(n.created_at)} · ${String(n.action || "—").toUpperCase()}`);
+      chip.addEventListener("click", async () => {
+        const old = await fetchNoteFull(n.id).catch(() => null);
+        if (!old) return;
+        host.innerHTML = "";
+        host.appendChild(noteView(old));
+        host.prepend(el("div", "past-banner",
+          `An earlier note, dated ${shortDate(n.created_at)}. The latest sits in the library.`));
+      });
+      bar.appendChild(chip);
+    }
+    host.appendChild(bar);
+  }
 }
 
 /* ---------- session ---------- */
@@ -600,19 +643,46 @@ function onProgress(event) {
 
 /* ---------- run ---------- */
 async function runAnalysis(ticker) {
-  if (runningTicker) return;
+  if (runningTicker) {
+    $("stage").prepend(el("div", "error-card",
+      `A session for ${runningTicker} is already in progress — one at a time.`));
+    return;
+  }
+  if (!/^[A-Z0-9][A-Z0-9.\-]{0,11}$/.test(ticker)) {
+    $("stage").prepend(el("div", "error-card", `"${ticker}" does not look like a ticker.`));
+    return;
+  }
+
+  // Guard the budget: no quote means a typo far more often than a real name.
+  const quotes = await fetchQuotes([ticker]);
+  if (!quotes.length && !quoteCache[ticker]) {
+    location.hash = `#/t/${ticker}`;
+    renderRoute();
+    $("stage").prepend(el("div", "error-card",
+      `No market data found for "${ticker}" — check the symbol before spending a committee session on it.`));
+    return;
+  }
+
   runningTicker = ticker;
   $("analyze-btn").disabled = true;
   if (!store.watchlist.includes(ticker)) store.watchlist = [...store.watchlist, ticker];
   location.hash = `#/t/${ticker}`;
   renderRoute();
-  fetchQuotes([ticker]).then(() => { if (currentRoute().ticker === ticker) renderRoute(); });
+
+  let sawComplete = false;
+  const controller = new AbortController();
+  let lastEvent = Date.now();
+  const watchdog = setInterval(() => {
+    // A stream that goes fully silent (server heartbeats included) is dead.
+    if (Date.now() - lastEvent > 120000) controller.abort();
+  }, 5000);
 
   try {
     const { builtins, customs } = activeRoster();
     const response = await fetch("/analyze/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         ticker,
         model_name: $("model-select").value || undefined,
@@ -622,28 +692,40 @@ async function runAnalysis(ticker) {
     });
     if (!response.ok) throw new Error(`Server error ${response.status}`);
     await consumeSSE(response.body, {
+      onChunk: () => { lastEvent = Date.now(); },
       progress: onProgress,
       complete: (event) => {
+        sawComplete = true;
         const d = event.data;
         const decision = decisionOf(d);
-        notesIndex.unshift({
+        const summary = {
           id: d.note_id, ticker: d.ticker, created_at: new Date().toISOString(),
           model_name: d.model_name, run_cost: d.run_cost,
           action: decision.action, confidence: decision.confidence, thesis: decision.reasoning,
-        });
-        if (d.note_id != null) noteCache[d.note_id] = { id: d.note_id, ticker: d.ticker, created_at: new Date().toISOString(), run_cost: d.run_cost, data: d };
+        };
+        const full = { id: d.note_id, ticker: d.ticker, created_at: summary.created_at, run_cost: d.run_cost, data: d };
+        if (d.note_id != null) noteCache[d.note_id] = full;
+        else summary._local = full; // note failed to persist; keep it viewable this session
+        notesIndex.unshift(summary);
         renderCost(d.run_cost, d.usage);
+        if (d.persist_error || d.note_id == null) {
+          setTimeout(() => $("stage").prepend(el("div", "error-card",
+            "The note rendered below but could not be saved to the library — it will disappear on reload.")), 100);
+        }
       },
       error: (event) => { throw new Error(event.message); },
     });
+    if (!sawComplete) throw new Error("the stream ended before the committee finished (server restart or timeout)");
   } catch (e) {
     runningTicker = null;
     $("analyze-btn").disabled = false;
-    const stage = $("stage");
-    const err = el("div", "error-card", `The session failed: ${e.message}`);
-    stage.appendChild(err);
+    clearInterval(watchdog);
+    renderRoute();
+    const reason = e.name === "AbortError" ? "the stream went silent for two minutes" : e.message;
+    $("stage").prepend(el("div", "error-card", `The session failed: ${reason}`));
     return;
   }
+  clearInterval(watchdog);
   runningTicker = null;
   $("analyze-btn").disabled = false;
   renderRoute();
@@ -656,6 +738,7 @@ async function consumeSSE(stream, handlers) {
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (handlers.onChunk) handlers.onChunk();
     buffer += decoder.decode(value, { stream: true });
     const events = buffer.split("\n\n");
     buffer = events.pop();
@@ -677,7 +760,7 @@ function noteView(rec) {
   const ticker = data.ticker;
   const wrap = el("div", "");
   const decision = decisionOf(data);
-  const entries = collectSignals(data.analyst_signals || {}, ticker);
+  const entries = collectSignals(data.analyst_signals || {}, ticker, data.custom_roster || {});
 
   // hero: stamp + thesis | tally
   const hero = el("div", "note-hero");
@@ -709,7 +792,7 @@ function noteView(rec) {
   }
   right.appendChild(meter);
   const legend = el("div", "consensus-legend");
-  const swatches = { bullish: "var(--bull)", neutral: "var(--parchment-40)", bearish: "var(--bear)" };
+  const swatches = { bullish: "var(--bull)", neutral: "var(--ink-3)", bearish: "var(--bear)" };
   for (const key of ["bullish", "neutral", "bearish"]) {
     const item = el("span", "key");
     const sw = el("span", "swatch");
@@ -792,16 +875,19 @@ function debateView(debate) {
   return card;
 }
 
-function collectSignals(signals, ticker) {
+function collectSignals(signals, ticker, roster = {}) {
   const entries = [];
   for (const [agentKey, byTicker] of Object.entries(signals)) {
     if (agentKey.startsWith("risk_management") || agentKey.startsWith("debate_room")) continue;
     const entry = byTicker?.[ticker];
     if (!entry) continue;
     const configKey = agentKey.replace(/_agent$/, "");
+    const snapshot = roster[configKey]; // the persona as it was when this note was written
     entries.push({
       agentKey,
       configKey,
+      snapshotName: snapshot?.name,
+      snapshotEpithet: snapshot?.epithet,
       isQuant: configKey.endsWith(QUANT_SUFFIX) || configKey === "news_sentiment",
       signal: String(entry.signal || "neutral").toLowerCase(),
       confidence: Number(entry.confidence || 0),
@@ -816,7 +902,8 @@ function renderPlaques(entries, personaGrid, quantGrid) {
   let index = 0;
   for (const entry of entries) {
     const meta = ANALYSTS[entry.configKey] || {};
-    const name = meta.display_name || displayName(entry.agentKey);
+    const name = entry.snapshotName || meta.display_name || displayName(entry.agentKey);
+    const epithet = meta.description || entry.snapshotEpithet || "";
     const card = el("div", `analyst-card sig-${entry.signal}`);
     card.style.setProperty("--stagger", `${Math.min(index++, 12) * 40}ms`);
 
@@ -827,7 +914,7 @@ function renderPlaques(entries, personaGrid, quantGrid) {
     const nameEl = el("div", "name", name);
     if (entry.configKey.startsWith("custom_")) nameEl.appendChild(el("span", "custom-chip", "CUSTOM"));
     idBlock.appendChild(nameEl);
-    if (meta.description) idBlock.appendChild(el("div", "epithet", meta.description));
+    if (epithet) idBlock.appendChild(el("div", "epithet", epithet));
     head.append(medallion, idBlock);
     card.appendChild(head);
 
@@ -905,12 +992,12 @@ function drawBigChart(panel, prices) {
     "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke",
   }));
   const lastX = x(closes.length - 1), lastY = y(closes[closes.length - 1]);
-  svg.appendChild(svgEl("circle", { cx: lastX, cy: lastY, r: 4.5, fill: color, stroke: "var(--chamber)", "stroke-width": 2 }));
+  svg.appendChild(svgEl("circle", { cx: lastX, cy: lastY, r: 4.5, fill: color, stroke: "var(--panel)", "stroke-width": 2 }));
   panel.appendChild(svg);
 
   // labels: high / low / endpoints
   const labels = el("div", "");
-  labels.style.cssText = "display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--parchment-40);padding:6px 2px 2px;letter-spacing:.05em";
+  labels.style.cssText = "display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);padding:6px 2px 2px;letter-spacing:.05em";
   labels.append(
     el("span", "", `${prices[0].date}  ·  L ${fmtPrice(min)}`),
     el("span", "", `H ${fmtPrice(max)}  ·  ${prices[prices.length - 1].date}`),
@@ -923,7 +1010,7 @@ function drawBigChart(panel, prices) {
   const cross = svgEl("line", { y1: padTop, y2: H - padBot, stroke: "var(--hairline)", "stroke-width": 1 });
   cross.style.display = "none";
   svg.appendChild(cross);
-  const dot = svgEl("circle", { r: 3.5, fill: color, stroke: "var(--chamber)", "stroke-width": 2 });
+  const dot = svgEl("circle", { r: 3.5, fill: color, stroke: "var(--panel)", "stroke-width": 2 });
   dot.style.display = "none";
   svg.appendChild(dot);
 

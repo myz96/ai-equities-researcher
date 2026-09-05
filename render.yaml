@@ -4,10 +4,13 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.web
     plan: free
+    region: singapore
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: APP_PASSWORD
+        sync: false
+      - key: DATABASE_URL
         sync: false
       - key: MODEL_NAME
         value: anthropic/claude-sonnet-5

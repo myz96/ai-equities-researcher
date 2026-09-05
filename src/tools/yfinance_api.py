@@ -73,11 +73,16 @@ def _growth(series, column, prior_column) -> float | None:
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
+    # Never persist a series that includes today: the last bar is a live
+    # partial and would freeze quotes for the rest of the day.
+    cacheable = end_date < datetime.date.today().isoformat()
     cache_key = f"yf_{ticker}_{start_date}_{end_date}"
-    if cached_data := _cache.get_prices(cache_key):
+    if cacheable and (cached_data := _cache.get_prices(cache_key)):
         return [Price(**price) for price in cached_data]
 
-    end_exclusive = (datetime.date.fromisoformat(end_date) + datetime.timedelta(days=1)).isoformat()
+    # +2 days: yfinance parses the range in the exchange timezone, and a UTC
+    # server date can lag the Sydney session by a day.
+    end_exclusive = (datetime.date.fromisoformat(end_date) + datetime.timedelta(days=2)).isoformat()
     try:
         df = yf.Ticker(ticker).history(start=start_date, end=end_exclusive, interval="1d", auto_adjust=False)
     except Exception as e:
@@ -107,6 +112,31 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
         return []
 
     _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+    return prices
+
+
+def get_adjusted_closes(ticker: str, start_date: str, end_date: str) -> list[Price]:
+    """Dividend- and split-adjusted closes — for grading total returns.
+
+    Regular get_prices shows real trading prices (right for charts); grading
+    a call across an ex-dividend date needs the adjusted series or a payout
+    eats the flat band.
+    """
+    end_exclusive = (datetime.date.fromisoformat(end_date) + datetime.timedelta(days=2)).isoformat()
+    try:
+        df = yf.Ticker(ticker).history(start=start_date, end=end_exclusive, interval="1d", auto_adjust=True)
+    except Exception as e:
+        logger.warning("yfinance adjusted fetch failed for %s: %s", ticker, e)
+        return []
+    if df is None or df.empty:
+        return []
+    prices = []
+    for index, row in df.iterrows():
+        close = _safe(row.get("Close"))
+        if close is None:
+            continue
+        prices.append(Price(open=close, close=close, high=close, low=close, volume=0,
+                            time=index.date().isoformat()))
     return prices
 
 
@@ -179,6 +209,48 @@ def _info(tkr) -> dict:
         return {}
 
 
+_fx_cache: dict[str, tuple[float, float]] = {}  # pair -> (fetched_at_ts, rate)
+
+
+def _fx_rate(from_ccy: str, to_ccy: str) -> float | None:
+    """Spot FX rate from_ccy -> to_ccy via Yahoo (cached ~1h)."""
+    import time as _time
+
+    if not from_ccy or not to_ccy or from_ccy == to_ccy:
+        return 1.0
+    pair = f"{from_ccy}{to_ccy}=X"
+    hit = _fx_cache.get(pair)
+    if hit and _time.time() - hit[0] < 3600:
+        return hit[1]
+    try:
+        series = yf.Ticker(pair).history(period="5d", interval="1d")
+        rate = float(series["Close"].dropna().iloc[-1])
+    except Exception:
+        return hit[1] if hit else None
+    _fx_cache[pair] = (_time.time(), rate)
+    return rate
+
+
+def _market_caps_in_statement_currency(info: dict) -> tuple[float | None, float | None, str]:
+    """Market cap and enterprise value converted into the statement currency.
+
+    Yahoo quotes market cap in the listing currency (e.g. AUD for BHP.AX)
+    while statements may be in another (USD for BHP). Mixing them makes
+    valuation gaps and FCF yields wrong by the FX rate, so everything that
+    sits next to statement figures gets converted here.
+    """
+    quote_ccy = info.get("currency") or "USD"
+    fin_ccy = info.get("financialCurrency") or quote_ccy
+    rate = _fx_rate(quote_ccy, fin_ccy)
+    market_cap = _safe(info.get("marketCap"))
+    enterprise_value = _safe(info.get("enterpriseValue"))
+    if rate is None:
+        return None, None, fin_ccy  # cannot convert: better absent than wrong
+    mc = market_cap * rate if market_cap is not None else None
+    ev = enterprise_value * rate if enterprise_value is not None else None
+    return mc, ev, fin_ccy
+
+
 def get_financial_metrics(
     ticker: str,
     end_date: str,
@@ -195,7 +267,7 @@ def get_financial_metrics(
     if not periods:
         return []
     info = _info(tkr)
-    currency = info.get("currency") or "USD"
+    info_market_cap, info_enterprise_value, currency = _market_caps_in_statement_currency(info)
 
     rows = {}
     for name, labels in _INCOME_ROWS.items():
@@ -240,7 +312,7 @@ def get_financial_metrics(
             quick_assets = current_assets - (inventory or 0)
 
         latest = i == 0
-        market_cap = _safe(info.get("marketCap")) if latest else None
+        market_cap = info_market_cap if latest else None
 
         metrics.append(
             FinancialMetrics(
@@ -249,7 +321,7 @@ def get_financial_metrics(
                 period=period,
                 currency=currency,
                 market_cap=market_cap,
-                enterprise_value=_safe(info.get("enterpriseValue")) if latest else None,
+                enterprise_value=info_enterprise_value if latest else None,
                 price_to_earnings_ratio=_safe(info.get("trailingPE")) if latest else None,
                 price_to_book_ratio=_safe(info.get("priceToBook")) if latest else None,
                 price_to_sales_ratio=_safe(info.get("priceToSalesTrailing12Months")) if latest else None,
@@ -309,7 +381,8 @@ def search_line_items(
     periods = _report_periods(income, balance, end_date)
     if not periods:
         return []
-    currency = _info(tkr).get("currency") or "USD"
+    info = _info(tkr)
+    currency = info.get("financialCurrency") or info.get("currency") or "USD"
 
     def resolve(name: str, col) -> float | None:
         if name in _INCOME_ROWS:
@@ -467,17 +540,23 @@ def get_company_news(
 
 
 def get_market_cap(ticker: str, end_date: str, api_key: str = None) -> float | None:
+    """Market cap in the STATEMENT currency, so it sits next to line items."""
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     tkr = yf.Ticker(ticker)
+    info = _info(tkr)
     if end_date >= today:
-        market_cap = _safe(_info(tkr).get("marketCap"))
+        market_cap, _, _ = _market_caps_in_statement_currency(info)
         if market_cap:
             return market_cap
 
-    # Historical (or fallback): price on the date times current share count.
-    start = (datetime.date.fromisoformat(end_date) - datetime.timedelta(days=7)).isoformat()
+    # Historical (or fallback): price on the date times the CURRENT share
+    # count — approximate; buybacks/issuance skew older dates.
+    start = (datetime.date.fromisoformat(end_date) - datetime.timedelta(days=14)).isoformat()
     prices = get_prices(ticker, start, end_date)
-    shares = _safe(_info(tkr).get("sharesOutstanding"))
+    shares = _safe(info.get("sharesOutstanding"))
     if not prices or not shares:
         return None
-    return prices[-1].close * shares
+    rate = _fx_rate(info.get("currency") or "USD", info.get("financialCurrency") or info.get("currency") or "USD")
+    if rate is None:
+        return None
+    return prices[-1].close * shares * rate

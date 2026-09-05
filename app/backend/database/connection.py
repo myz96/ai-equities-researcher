@@ -22,8 +22,13 @@ if DATABASE_URL.startswith("sqlite"):
         DATABASE_URL,
         connect_args={"check_same_thread": False}  # Needed for SQLite
     )
+    print("WARNING: using ephemeral SQLite — set DATABASE_URL for durable storage.")
 else:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+    engine = create_engine(
+        DATABASE_URL, pool_pre_ping=True, pool_recycle=300,
+        connect_args={"connect_timeout": 10},
+    )
+    print(f"Database: postgresql ({DATABASE_URL.split('@')[-1].split('/')[0]})")
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

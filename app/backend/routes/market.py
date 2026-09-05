@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from datetime import date, timedelta
 
@@ -19,7 +20,10 @@ def _cached(key: str, build):
     if hit and now - hit[0] < _TTL_SECONDS:
         return hit[1]
     value = build()
-    _cache[key] = (now, value)
+    if value:  # never cache a failure: one yfinance blip must not stick for the TTL
+        if len(_cache) > 512:
+            _cache.pop(next(iter(_cache)))
+        _cache[key] = (now, value)
     return value
 
 
@@ -43,6 +47,7 @@ def _quote(ticker: str) -> dict | None:
 async def quotes(tickers: str = Query(..., description="Comma-separated tickers")):
     """Last price, day change, and a 30-day close series per ticker."""
     wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()][:20]
+    wanted = [t for t in wanted if re.fullmatch(r"\^?[A-Z0-9][A-Z0-9.\-]{0,11}", t)]
 
     def build_one(ticker):
         return _cached(f"q_{ticker}", lambda: _quote(ticker))

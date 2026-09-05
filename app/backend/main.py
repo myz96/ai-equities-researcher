@@ -33,25 +33,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Optional password gate for public deployments. Set APP_PASSWORD to enable;
-# any username works, the password must match.
+# Password gate. APP_PASSWORD must be set; any username works, the password
+# must match. Fails closed: an unset password never exposes the site.
 _app_password = os.environ.get("APP_PASSWORD")
+_MAX_BODY_BYTES = 2_000_000
 
 
 @app.middleware("http")
 async def basic_auth(request: Request, call_next):
     if not _app_password:
-        return await call_next(request)
+        return Response("Server not configured: APP_PASSWORD is unset.", status_code=503)
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > _MAX_BODY_BYTES:
+        return Response("Request body too large.", status_code=413)
     auth = request.headers.get("Authorization", "")
+    authed = False
     if auth.startswith("Basic "):
+        # The try guards ONLY the credential decode. call_next must stay
+        # outside it: a route exception swallowed here becomes a bogus 401.
         try:
             decoded = base64.b64decode(auth[6:]).decode()
             _, _, password = decoded.partition(":")
-            if secrets.compare_digest(password, _app_password):
-                return await call_next(request)
+            authed = secrets.compare_digest(password, _app_password)
         except Exception:
-            pass
-    return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="analyst"'})
+            authed = False
+    if not authed:
+        return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="analyst"'})
+    return await call_next(request)
 
 
 # Include all routes

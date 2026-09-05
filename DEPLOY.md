@@ -11,7 +11,8 @@ The app is one container: FastAPI backend + static report UI, built from
 | `MODEL_NAME` / `MODEL_PROVIDER` | Model for analyses. Use a frontier model at launch (e.g. `anthropic/claude-sonnet-5` + `OpenRouter`). |
 | `DATA_PROVIDER` | `yfinance` (free, default) or `financialdatasets` (needs credits). |
 | `FINANCIAL_DATASETS_API_KEY` | Only used when `DATA_PROVIDER=financialdatasets`. |
-| `APP_PASSWORD` | Enables the password gate. Give the password to the friend. |
+| `APP_PASSWORD` | Required — the site refuses all requests without it. Give the password to the friend. |
+| `DATABASE_URL` | Required for durable storage (Neon Postgres). Without it the app falls back to ephemeral SQLite and loses all notes on every restart. |
 | `SITE_NAME` / `SITE_TAGLINE` | Site branding. |
 | `BIRTHDAY_MESSAGE` | Shows a banner on first visit. |
 
@@ -49,5 +50,11 @@ events continuously, so idle timeouts do not trigger.
 
 ## Notes
 
-- The SQLite file the backend creates is scratch state; no volume needed.
+- All durable state (notes, personas, watchlist, bench) lives in Postgres via
+  `DATABASE_URL`. The container disk is ephemeral and holds nothing of value.
+- Schema changes: tables are created automatically on first boot
+  (`create_all`), but existing tables are never altered — new columns need a
+  manual `ALTER TABLE` against the database.
+- A dropped connection does not stop a running committee session server-side;
+  the spend completes but the note still saves.
 - Keep the education-only disclaimer visible in the UI footer.

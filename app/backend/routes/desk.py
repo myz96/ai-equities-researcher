@@ -44,7 +44,7 @@ def get_state(key: str, db: Session = Depends(get_db)):
 def put_state(key: str, body: StateBody, db: Session = Depends(get_db)):
     if key not in ("watchlist", "bench"):
         raise HTTPException(404)
-    _put_state(db, key, [str(v)[:24] for v in body.value][:100])
+    _put_state(db, key, [str(v)[:64] for v in body.value][:100])
     return {"ok": True}
 
 

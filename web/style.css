@@ -163,6 +163,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .lib-row .lt { font-family: var(--mono); font-size: 12px; color: var(--ink); flex: 1; letter-spacing: 0.02em; }
 .lib-row .ld { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
 .rail-empty { padding: 4px 14px; font-size: 12.5px; color: var(--ink-3); }
+.session-row .lt { color: var(--accent); }
 
 .verdict-chip {
   font-family: var(--mono); font-weight: 600; font-size: 9.5px; letter-spacing: 0.08em;
@@ -413,6 +414,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 /* ---------- Committee page ---------- */
 .member-card.benched { opacity: 0.45; }
 .member-card .reasoning { -webkit-line-clamp: 3; }
+.past-notes {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 26px; font-family: var(--sans); font-size: 12px; color: var(--ink-3);
+}
+.past-banner {
+  background: var(--panel); border: 1px solid var(--hairline); border-radius: 7px;
+  padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: var(--ink-2);
+}
 .record-line {
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
   font-variant-numeric: tabular-nums; letter-spacing: 0.03em;

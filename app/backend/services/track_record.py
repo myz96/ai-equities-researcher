@@ -12,14 +12,19 @@ Rules (v1):
 """
 
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.backend.database.models import DeskNote
 from src.tools import yfinance_api
 
 HORIZON_DAYS = 30
 FLAT_BAND = 0.02
+MIN_GRADED_FOR_PROMPT = 3  # one unlucky call must not discredit a member
 EXCLUDED = ("risk_management", "debate_room", "portfolio_manager")
+
+
+def _utc_today() -> date:
+    return datetime.now(timezone.utc).date()
 
 _cache: dict = {"at": 0.0, "data": None}
 _TTL_SECONDS = 1800
@@ -30,7 +35,8 @@ def invalidate_cache():
 
 
 def _price_series(ticker: str, start: str) -> list:
-    return yfinance_api.get_prices(ticker, start, date.today().isoformat())
+    # Adjusted closes: grading measures total return, so dividends count.
+    return yfinance_api.get_adjusted_closes(ticker, start, _utc_today().isoformat())
 
 
 def _close_on_or_before(prices: list, day: date) -> float | None:
@@ -73,21 +79,26 @@ def compute_track_records(db) -> dict:
     series_cache: dict[str, list] = {}
     records: dict[str, dict] = {}
 
+    today = _utc_today()
     for note in notes:
         ticker = note.ticker
-        note_day = (note.created_at or datetime.utcnow()).date()
+        note_day = (note.created_at or datetime.now(timezone.utc)).date()
         if ticker not in series_cache:
-            start = (min(note_day, date.today()) - timedelta(days=HORIZON_DAYS + 20)).isoformat()
+            start = (min(note_day, today) - timedelta(days=HORIZON_DAYS + 20)).isoformat()
             series_cache[ticker] = _price_series(ticker, start)
         prices = series_cache[ticker]
         if not prices:
             continue
 
-        entry_price = _close_on_or_before(prices, note_day)
+        # Entry = the last close STRICTLY BEFORE the note day: the price the
+        # committee actually saw. Using the note-day close would grade against
+        # a bar that mostly closes after the call (lookahead), and the entry
+        # would silently change once that bar lands.
+        entry_price = _close_on_or_before(prices, note_day - timedelta(days=1))
         if not entry_price:
             continue
         horizon_day = note_day + timedelta(days=HORIZON_DAYS)
-        graded = date.today() >= horizon_day
+        graded = today >= horizon_day
         exit_price = _close_on_or_before(prices, horizon_day) if graded else prices[-1].close
         if not exit_price:
             continue
@@ -117,9 +128,14 @@ def compute_track_records(db) -> dict:
 
 
 def records_for_prompt(records: dict) -> dict:
-    """Compact per-member strings for the LLM prompts. Only proven members."""
+    """Compact per-member strings for the LLM prompts.
+
+    Only members with a real sample: below MIN_GRADED_FOR_PROMPT the record
+    is noise, and feeding it to the debate room would let one unlucky call
+    discredit a member for months.
+    """
     out = {}
     for member, rec in records.items():
-        if rec["graded"]:
+        if rec["graded"] >= MIN_GRADED_FOR_PROMPT:
             out[member] = f"{rec['hits']}/{rec['graded']} calls right over {HORIZON_DAYS}d"
     return out

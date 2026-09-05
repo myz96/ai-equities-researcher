@@ -26,3 +26,6 @@ data/
 # OS specific
 .DS_Store
 Thumbs.db 
+
+# Local databases must never ship in the image
+*.db

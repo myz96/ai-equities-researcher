@@ -89,7 +89,7 @@ Recent headlines:
         {
             "name": persona.get("name", "Custom Analyst"),
             "epithet": persona.get("epithet") or "an independent investor",
-            "philosophy": persona.get("philosophy", ""),
+            "philosophy": str(persona.get("philosophy", ""))[:6000],
             "ticker": ticker,
             "metrics": json.dumps(metrics, indent=1)[:6000],
             "headlines": json.dumps(headlines, indent=1)[:2000],
