@@ -136,6 +136,19 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
 
         try:
             usage_before = await asyncio.to_thread(_openrouter_usage)
+
+            def load_track_records():
+                from app.backend.services.track_record import compute_track_records, records_for_prompt
+                db = SessionLocal()
+                try:
+                    return records_for_prompt(compute_track_records(db))
+                except Exception:
+                    return {}
+                finally:
+                    db.close()
+
+            track_records = await asyncio.to_thread(load_track_records)
+
             run_task = asyncio.create_task(
                 run_graph_async(
                     graph=graph,
@@ -145,6 +158,7 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
                     end_date=end_date,
                     model_name=model_name,
                     model_provider=model_provider,
+                    extra_data={"track_records": track_records},
                 )
             )
             disconnect_task = asyncio.create_task(wait_for_disconnect())

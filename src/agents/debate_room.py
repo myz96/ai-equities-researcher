@@ -38,6 +38,7 @@ def debate_room_agent(state: AgentState, agent_id: str = "debate_room_agent"):
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Collecting analyst views")
 
+        track_records = data.get("track_records") or {}
         views = []
         counts = {"bullish": 0, "bearish": 0, "neutral": 0}
         for agent, signals in analyst_signals.items():
@@ -52,14 +53,16 @@ def debate_room_agent(state: AgentState, agent_id: str = "debate_room_agent"):
             reasoning = entry.get("reasoning", "")
             if isinstance(reasoning, dict):
                 reasoning = json.dumps(reasoning)
-            views.append(
-                {
-                    "analyst": agent.replace("_agent", "").replace("_", " ").title(),
-                    "signal": signal,
-                    "confidence": entry.get("confidence"),
-                    "reasoning": str(reasoning)[:800],
-                }
-            )
+            view = {
+                "analyst": agent.replace("_agent", "").replace("_", " ").title(),
+                "signal": signal,
+                "confidence": entry.get("confidence"),
+                "reasoning": str(reasoning)[:800],
+            }
+            record = track_records.get(agent.removesuffix("_agent"))
+            if record:
+                view["track_record"] = record
+            views.append(view)
 
         if not views:
             progress.update_status(agent_id, ticker, "Failed: no analyst signals")
@@ -113,6 +116,10 @@ investors has given views on a stock. Your job is adversarial:
    thesis directly contradict a bear thesis, and what would decide who is right?
 3. Give a verdict on how robust the consensus is: is it independent analysis
    converging, or the same argument repeated?
+
+Some panel members carry a "track_record" — their graded hit rate on past
+calls. Use it as ammunition: an argument from a member with a poor record
+deserves less deference, and say so by name.
 
 Your `signal` is the stance of your devil's advocate case (if the majority is
 bearish, you argue the bullish case, and vice versa; for a neutral majority,

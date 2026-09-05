@@ -129,12 +129,12 @@ def create_graph(graph_nodes: list, graph_edges: list) -> StateGraph:
     return graph
 
 
-async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request=None):
+async def run_graph_async(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request=None, extra_data=None):
     """Async wrapper for run_graph to work with asyncio."""
     # Use run_in_executor to run the synchronous function in a separate thread
     # so it doesn't block the event loop
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request))  # Use default executor
+    result = await loop.run_in_executor(None, lambda: run_graph(graph, portfolio, tickers, start_date, end_date, model_name, model_provider, request, extra_data))  # Use default executor
     return result
 
 
@@ -147,6 +147,7 @@ def run_graph(
     model_name: str,
     model_provider: str,
     request=None,
+    extra_data: dict | None = None,
 ) -> dict:
     """
     Run the graph with the given portfolio, tickers,
@@ -166,6 +167,7 @@ def run_graph(
                 "start_date": start_date,
                 "end_date": end_date,
                 "analyst_signals": {},
+                **(extra_data or {}),
             },
             "metadata": {
                 "show_reasoning": False,

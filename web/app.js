@@ -339,7 +339,32 @@ function renderDesk() {
 }
 
 /* ---------- committee ---------- */
+let TRACK_RECORDS = {};
+
+function recordLine(key) {
+  // Some agents sign their signals without the _analyst suffix.
+  const rec = TRACK_RECORDS[key] || TRACK_RECORDS[key.replace(/_analyst$/, "")];
+  if (!rec || !rec.calls) return null;
+  const parts = [`${rec.calls} call${rec.calls === 1 ? "" : "s"}`];
+  if (rec.graded) parts.push(`${Math.round(rec.hit_rate * 100)}% hit rate`);
+  if (rec.open && rec.open_aligned_return != null) {
+    const pct = rec.open_aligned_return * 100;
+    parts.push(`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% open`);
+  }
+  return parts.join(" · ");
+}
+
 function renderCommittee() {
+  const stage = $("stage");
+  stage.innerHTML = "";
+  fetch("/desk/track-record").then((r) => r.json()).then((records) => {
+    TRACK_RECORDS = records || {};
+    if (currentRoute().view === "committee") paintCommittee();
+  }).catch(() => {});
+  paintCommittee();
+}
+
+function paintCommittee() {
   const stage = $("stage");
   stage.innerHTML = "";
 
@@ -349,8 +374,10 @@ function renderCommittee() {
   const head = el("div", "tkr-head");
   head.appendChild(el("span", "tk", "The Committee"));
   head.appendChild(el("span", "spacer"));
+  const committeeRec = recordLine("committee");
   head.appendChild(el("span", "asof",
-    `${activeCount} ACTIVE · ≈ $${(activeCount * COST_PER_MEMBER).toFixed(2)} PER NOTE`));
+    `${activeCount} ACTIVE · ≈ $${(activeCount * COST_PER_MEMBER).toFixed(2)} PER NOTE` +
+    (committeeRec ? ` · DECISIONS: ${committeeRec.toUpperCase()}` : "")));
   stage.appendChild(head);
 
   const sections = [
@@ -401,6 +428,9 @@ function memberCard(m) {
     const style = el("p", "reasoning", m.investing_style);
     card.appendChild(style);
   }
+
+  const record = recordLine(m.key);
+  card.appendChild(el("div", "record-line", record || "No graded calls yet"));
 
   const actions = el("div", "member-actions");
   const toggle = el("button", "btn-quiet", benched ? "Benched" : "Active");

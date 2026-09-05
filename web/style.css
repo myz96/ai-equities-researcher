@@ -413,6 +413,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 /* ---------- Committee page ---------- */
 .member-card.benched { opacity: 0.45; }
 .member-card .reasoning { -webkit-line-clamp: 3; }
+.record-line {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.03em;
+}
 .member-actions { display: flex; gap: 8px; border-top: 1px solid var(--hairline-soft); padding-top: 10px; }
 .member-actions .toggled-off { color: var(--ink-3); }
 .member-actions .danger:hover { color: var(--bear); border-color: var(--bear); }

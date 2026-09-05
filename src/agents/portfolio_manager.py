@@ -53,7 +53,8 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
         else:
             max_shares[ticker] = 0
 
-        # Compress analyst signals to {sig, conf}
+        # Compress analyst signals to {sig, conf} (+ track record when proven)
+        track_records = state["data"].get("track_records") or {}
         ticker_signals = {}
         for agent, signals in analyst_signals.items():
             if not agent.startswith("risk_management_agent") and ticker in signals:
@@ -61,6 +62,9 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
                 conf = signals[ticker].get("confidence")
                 if sig is not None and conf is not None:
                     ticker_signals[agent] = {"sig": sig, "conf": conf}
+                    record = track_records.get(agent.removesuffix("_agent"))
+                    if record:
+                        ticker_signals[agent]["record"] = record
         signals_by_ticker[ticker] = ticker_signals
 
     state["data"]["current_prices"] = current_prices
@@ -215,6 +219,8 @@ def generate_trading_decision(
                 "system",
                 "You are a portfolio manager.\n"
                 "Inputs per ticker: analyst signals and allowed actions with max qty (already validated).\n"
+                "Some signals carry a 'record' (that analyst's graded hit rate on past calls): "
+                "weigh proven callers more and poor ones less; treat unproven analysts neutrally.\n"
                 "Pick one allowed action per ticker and a quantity ≤ the max. "
                 "Keep reasoning very concise (max 100 chars). No cash or margin math. Return JSON only."
             ),

@@ -102,6 +102,16 @@ def delete_persona(persona_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# ---------- track record ----------
+
+@router.get("/track-record")
+async def track_record(db: Session = Depends(get_db)):
+    import asyncio
+
+    from app.backend.services.track_record import compute_track_records
+    return await asyncio.to_thread(compute_track_records, db)
+
+
 # ---------- notes ----------
 
 @router.get("/notes")
@@ -159,8 +169,11 @@ def import_local(body: ImportBody, db: Session = Depends(get_db)):
 
 def save_note(db: Session, data: dict) -> int:
     """Called by the run route when a committee session completes."""
+    from app.backend.services.track_record import invalidate_cache
+
     n = DeskNote(ticker=data.get("ticker"), model_name=data.get("model_name"),
                  run_cost=data.get("run_cost"), data=data)
     db.add(n)
     db.commit()
+    invalidate_cache()
     return n.id
