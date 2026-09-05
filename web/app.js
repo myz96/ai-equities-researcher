@@ -227,6 +227,22 @@ function renderRoute() {
   if (route.view === "ticker") renderTickerPage(route.ticker);
   else if (route.view === "committee") renderCommittee();
   else renderDesk();
+  flushStageNotice();
+}
+
+/* A notice that survives exactly one render: setting location.hash queues a
+   second renderRoute via hashchange, which would wipe anything prepended
+   directly — so the message rides through the render instead. */
+let stageNotice = null;
+
+function showStageNotice(message) {
+  stageNotice = message;
+}
+
+function flushStageNotice() {
+  if (!stageNotice) return;
+  $("stage").prepend(el("div", "error-card", stageNotice));
+  stageNotice = null;
 }
 
 /* ---------- quotes ---------- */
@@ -620,7 +636,12 @@ async function renderNoteInto(host, ticker) {
   }
   const full = summary._local || await fetchNoteFull(summary.id).catch(() => null);
   if (!full) {
-    host.appendChild(el("div", "error-card", "Could not load the note."));
+    const card = el("div", "error-card");
+    card.appendChild(el("span", "", "Could not load the note — the connection may have dropped. "));
+    const retry = el("button", "btn-quiet", "Try again");
+    retry.addEventListener("click", () => renderNoteInto(host, ticker));
+    card.appendChild(retry);
+    host.appendChild(card);
     return;
   }
   host.appendChild(noteView(full));
@@ -697,11 +718,12 @@ async function runAnalysis(ticker) {
   if (!quotes.length && !quoteCache[ticker]) {
     runningTicker = null;
     $("analyze-btn").disabled = false;
-    location.hash = `#/t/${ticker}`;
-    renderRoute();
-    $("stage").prepend(el("div", "error-card",
+    showStageNotice(
       `No market data came back for "${ticker}". Check the symbol — or, if it is right, ` +
-      `the data source may be having a moment; try again shortly.`));
+      `the data source may be having a moment; try again shortly.`);
+    const target = `#/t/${ticker}`;
+    if (location.hash === target) renderRoute();
+    else location.hash = target; // hashchange runs renderRoute and flushes the notice
     return;
   }
   if (!store.watchlist.includes(ticker)) store.watchlist = [...store.watchlist, ticker];
