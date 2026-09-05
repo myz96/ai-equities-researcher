@@ -48,6 +48,9 @@
       <nav id="library" class="library" aria-label="Research library"></nav>
       <div class="rail-head library-head"><span>Manage</span></div>
       <a id="committee-link" class="lib-row" href="#/committee"><span class="lt">The Committee</span></a>
+      <button id="feedback-link" class="lib-row feedback-link" type="button">
+        <span class="lt">Ideas for the desk</span>
+      </button>
     </aside>
 
     <main id="stage" class="stage" aria-live="polite"></main>
@@ -58,6 +61,20 @@
       For education only. Nothing here is financial advice.
       The committee is artificial; the losses would be real.</p>
   </footer>
+
+  <dialog id="feedback-dialog">
+    <form id="feedback-form" method="dialog">
+      <h3>Ideas for the desk</h3>
+      <label>What should this do better?
+        <textarea id="feedback-text" required minlength="3" maxlength="2000" rows="6"
+          placeholder="A feature, a fix, a complaint — it goes straight to the management."></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="feedback-cancel" class="btn-quiet">Cancel</button>
+        <button type="submit" id="feedback-send" class="btn-brass">Send it</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="persona-dialog">
     <form id="persona-form" method="dialog">

@@ -164,6 +164,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .lib-row .ld { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
 .rail-empty { padding: 4px 14px; font-size: 12.5px; color: var(--ink-3); }
 .session-row .lt { color: var(--accent); }
+.feedback-link { background: none; border: none; width: 100%; text-align: left; font-family: inherit; }
+.feedback-link .lt { color: var(--ink-3); }
+.feedback-link:hover .lt { color: var(--ink); }
+#feedback-dialog {
+  background: var(--panel-2); color: var(--ink-2);
+  border: 1px solid var(--hairline); border-radius: 12px;
+  padding: 22px 24px; width: min(440px, 92vw);
+}
+#feedback-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+#feedback-dialog h3 { margin: 0 0 14px; color: var(--ink); font-size: 16px; font-weight: 600; }
+#feedback-dialog label {
+  display: block; margin-bottom: 12px;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+}
+#feedback-dialog textarea {
+  display: block; width: 100%; margin-top: 5px;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 7px;
+  padding: 8px 10px; font-family: var(--sans); font-size: 13.5px; resize: vertical;
+}
+#feedback-dialog textarea:focus { outline: none; border-color: var(--accent); }
 
 .verdict-chip {
   font-family: var(--mono); font-weight: 600; font-size: 9.5px; letter-spacing: 0.08em;

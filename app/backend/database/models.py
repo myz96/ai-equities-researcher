@@ -144,3 +144,13 @@ class DeskState(Base):
 
     key = Column(String(40), primary_key=True)
     value = Column(JSON, nullable=False)
+
+
+class DeskFeedback(Base):
+    """An idea or complaint submitted from the feedback button."""
+    __tablename__ = "desk_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    text = Column(Text, nullable=False)
+    page = Column(String(120), nullable=True)  # where in the app it was written

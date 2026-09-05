@@ -1,11 +1,13 @@
+import os
 import re
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.backend.database.connection import get_db
-from app.backend.database.models import DeskNote, DeskPersona, DeskState
+from app.backend.database.models import DeskFeedback, DeskNote, DeskPersona, DeskState
 
 router = APIRouter(prefix="/desk", tags=["desk"])
 
@@ -100,6 +102,53 @@ def delete_persona(persona_id: str, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {"ok": True}
+
+
+# ---------- feedback ----------
+
+class FeedbackBody(BaseModel):
+    text: str = Field(min_length=3, max_length=2000)
+    page: str = Field(default="", max_length=120)
+
+
+def _email_feedback(text: str, page: str) -> None:
+    """Best-effort ping to the owner via Resend. Silence on failure — the
+    feedback is already safe in the database."""
+    api_key = os.environ.get("RESEND_API_KEY")
+    to_addr = os.environ.get("FEEDBACK_EMAIL")
+    if not api_key or not to_addr:
+        return
+    try:
+        requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "from": "Terliatian Capital <onboarding@resend.dev>",
+                "to": [to_addr],
+                "subject": "Terliatian Capital — new idea from the desk",
+                "text": f"Submitted from: {page or 'unknown page'}\n\n{text}",
+            },
+            timeout=8,
+        )
+    except Exception as e:
+        print(f"Feedback email failed: {e!r}")
+
+
+@router.post("/feedback")
+async def submit_feedback(body: FeedbackBody, db: Session = Depends(get_db)):
+    import asyncio
+
+    db.add(DeskFeedback(text=body.text.strip(), page=body.page.strip()))
+    db.commit()
+    await asyncio.to_thread(_email_feedback, body.text.strip(), body.page.strip())
+    return {"ok": True}
+
+
+@router.get("/feedback")
+def list_feedback(db: Session = Depends(get_db)):
+    rows = db.query(DeskFeedback).order_by(DeskFeedback.created_at.desc()).limit(200).all()
+    return [{"id": f.id, "created_at": f.created_at.isoformat() if f.created_at else None,
+             "page": f.page, "text": f.text} for f in rows]
 
 
 # ---------- track record ----------

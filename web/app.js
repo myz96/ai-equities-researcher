@@ -172,6 +172,33 @@ async function init() {
   });
   $("persona-cancel").addEventListener("click", () => $("persona-dialog").close());
 
+  $("feedback-link").addEventListener("click", () => {
+    const dialog = $("feedback-dialog");
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  });
+  $("feedback-cancel").addEventListener("click", () => $("feedback-dialog").close());
+  $("feedback-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const btn = $("feedback-send");
+    const text = $("feedback-text").value.trim();
+    if (!text || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+    fetch("/desk/feedback", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, page: location.hash || "#/" }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        $("feedback-text").value = "";
+        $("feedback-dialog").close();
+        $("stage").prepend(el("div", "past-banner", "Sent. The management thanks you and will pretend to read it promptly."));
+      })
+      .catch(() => { btn.textContent = "Failed — try again"; setTimeout(() => { btn.textContent = "Send it"; }, 1500); })
+      .finally(() => { btn.disabled = false; });
+  });
+
   window.addEventListener("hashchange", renderRoute);
   renderRail();
   renderRoute();
