@@ -66,9 +66,12 @@ async def prices(ticker: str, months: int = 3):
         end = date.today().isoformat()
         start = (date.today() - timedelta(days=months * 31)).isoformat()
         series = yfinance_api.get_prices(ticker, start, end)
+        if not series:
+            return None  # a transient fetch failure must not stick for the TTL
         return {
             "ticker": ticker,
             "prices": [{"date": p.time, "close": p.close} for p in series],
         }
 
-    return await asyncio.to_thread(lambda: _cached(f"p_{ticker}_{months}", build))
+    result = await asyncio.to_thread(lambda: _cached(f"p_{ticker}_{months}", build))
+    return result or {"ticker": ticker, "prices": []}

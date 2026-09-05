@@ -75,14 +75,19 @@ def _growth(series, column, prior_column) -> float | None:
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
     # Never persist a series that includes today: the last bar is a live
     # partial and would freeze quotes for the rest of the day.
-    cacheable = end_date < datetime.date.today().isoformat()
+    today = datetime.date.today().isoformat()
+    cacheable = end_date < today
     cache_key = f"yf_{ticker}_{start_date}_{end_date}"
     if cacheable and (cached_data := _cache.get_prices(cache_key)):
         return [Price(**price) for price in cached_data]
 
-    # +2 days: yfinance parses the range in the exchange timezone, and a UTC
-    # server date can lag the Sydney session by a day.
-    end_exclusive = (datetime.date.fromisoformat(end_date) + datetime.timedelta(days=2)).isoformat()
+    # Live requests get +2 days of slack: yfinance parses the range in the
+    # exchange timezone, and a UTC server date can lag the Sydney session by a
+    # day. Historical requests keep the exact window — extra slack there hands
+    # callers a bar past their end_date (lookahead for anything that grades or
+    # backtests on the last bar).
+    slack = 2 if end_date >= today else 1
+    end_exclusive = (datetime.date.fromisoformat(end_date) + datetime.timedelta(days=slack)).isoformat()
     try:
         df = yf.Ticker(ticker).history(start=start_date, end=end_exclusive, interval="1d", auto_adjust=False)
     except Exception as e:

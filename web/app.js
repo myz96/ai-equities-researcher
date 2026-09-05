@@ -653,18 +653,23 @@ async function runAnalysis(ticker) {
     return;
   }
 
+  // Reserve the session BEFORE any await: a double-click must hit the guard,
+  // not race past it while the quote check is in flight.
+  runningTicker = ticker;
+  $("analyze-btn").disabled = true;
+
   // Guard the budget: no quote means a typo far more often than a real name.
   const quotes = await fetchQuotes([ticker]);
   if (!quotes.length && !quoteCache[ticker]) {
+    runningTicker = null;
+    $("analyze-btn").disabled = false;
     location.hash = `#/t/${ticker}`;
     renderRoute();
     $("stage").prepend(el("div", "error-card",
-      `No market data found for "${ticker}" — check the symbol before spending a committee session on it.`));
+      `No market data came back for "${ticker}". Check the symbol — or, if it is right, ` +
+      `the data source may be having a moment; try again shortly.`));
     return;
   }
-
-  runningTicker = ticker;
-  $("analyze-btn").disabled = true;
   if (!store.watchlist.includes(ticker)) store.watchlist = [...store.watchlist, ticker];
   location.hash = `#/t/${ticker}`;
   renderRoute();
@@ -690,7 +695,11 @@ async function runAnalysis(ticker) {
         custom_analysts: customs,
       }),
     });
-    if (!response.ok) throw new Error(`Server error ${response.status}`);
+    if (!response.ok) {
+      // Refusals carry a human-readable reason (budget, one-at-a-time, ...).
+      const detail = await response.json().then((d) => d.detail).catch(() => null);
+      throw new Error(detail || `Server error ${response.status}`);
+    }
     await consumeSSE(response.body, {
       onChunk: () => { lastEvent = Date.now(); },
       progress: onProgress,
@@ -721,6 +730,7 @@ async function runAnalysis(ticker) {
     $("analyze-btn").disabled = false;
     clearInterval(watchdog);
     renderRoute();
+    if (sawComplete) return; // the note landed; a late stream error is noise
     const reason = e.name === "AbortError" ? "the stream went silent for two minutes" : e.message;
     $("stage").prepend(el("div", "error-card", `The session failed: ${reason}`));
     return;

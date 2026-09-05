@@ -147,12 +147,20 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
         progress_queue = asyncio.Queue()
         run_task = None
         disconnect_task = None
+        owns_lock = False
+        handed_off = False
 
         def progress_handler(agent_name, ticker_, status, analysis, timestamp):
             event = ProgressUpdateEvent(agent=agent_name, ticker=ticker_, status=status, timestamp=timestamp, analysis=analysis)
             progress_queue.put_nowait(event)
 
+        # Check-and-acquire with no await in between: atomic within one event-
+        # loop step, so two racing generators cannot both start a paid run.
+        if _run_lock.locked():
+            yield ErrorEvent(message="A session is already in progress. One at a time.").to_sse()
+            return
         await _run_lock.acquire()
+        owns_lock = True
         progress.register_handler(progress_handler)
 
         try:
@@ -187,14 +195,55 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
             )
             disconnect_task = asyncio.create_task(wait_for_disconnect())
 
+            def build_note_data(result, usage_after, run_cost):
+                return {
+                    "ticker": ticker,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "model_name": model_name,
+                    "run_cost": run_cost,
+                    "usage": usage_after,
+                    "custom_roster": {f"custom_{p['id']}": {"name": p["name"], "epithet": p.get("epithet", "")}
+                                      for p in customs},
+                    "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
+                    "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
+                }
+
+            def hand_off_orphan():
+                # The executor thread cannot be cancelled: it keeps calling the
+                # LLM after a disconnect. Keep the lock and the progress handler
+                # until it truly ends — otherwise the zombie leaks its events
+                # and its spend into the next session — and save the note, so
+                # the money buys something even when nobody is watching.
+                nonlocal handed_off
+                handed_off = True
+
+                async def finish():
+                    try:
+                        result = await run_task
+                        if result and result.get("messages"):
+                            usage_after = await asyncio.to_thread(_openrouter_usage)
+                            run_cost = None
+                            if usage_before and usage_after and usage_before.get("used") is not None and usage_after.get("used") is not None:
+                                run_cost = max(0.0, usage_after["used"] - usage_before["used"])
+                            db = SessionLocal()
+                            try:
+                                save_note(db, build_note_data(result, usage_after, run_cost))
+                            finally:
+                                db.close()
+                            print(f"Orphaned session for {ticker} finished and saved.")
+                    except Exception as e:
+                        print(f"Orphaned session for {ticker} failed: {e!r}")
+                    finally:
+                        _run_lock.release()
+                        progress.unregister_handler(progress_handler)
+
+                asyncio.create_task(finish())
+
             quiet_ticks = 0
             while not run_task.done():
                 if disconnect_task.done():
-                    run_task.cancel()
-                    try:
-                        await run_task
-                    except asyncio.CancelledError:
-                        pass
+                    hand_off_orphan()
                     return
                 try:
                     event = await asyncio.wait_for(progress_queue.get(), timeout=1.0)
@@ -226,20 +275,7 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
             if usage_before and usage_after and usage_before.get("used") is not None and usage_after.get("used") is not None:
                 run_cost = max(0.0, usage_after["used"] - usage_before["used"])
 
-            note_data = {
-                "ticker": ticker,
-                "start_date": start_date,
-                "end_date": end_date,
-                "model_name": model_name,
-                "run_cost": run_cost,
-                "usage": usage_after,
-                # Snapshot: custom members keep their identity in this note
-                # even after they are edited or deleted from the roster.
-                "custom_roster": {f"custom_{p['id']}": {"name": p["name"], "epithet": p.get("epithet", "")}
-                                  for p in customs},
-                "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
-                "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
-            }
+            note_data = build_note_data(result, usage_after, run_cost)
             try:
                 db = SessionLocal()
                 try:
@@ -253,16 +289,15 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
             yield CompleteEvent(data=note_data).to_sse()
 
         except asyncio.CancelledError:
+            # Starlette killed the generator mid-yield (client vanished): the
+            # run itself must still finish, spend accounted, note saved.
+            if run_task is not None and not run_task.done():
+                hand_off_orphan()
             return
         finally:
-            _run_lock.release()
-            progress.unregister_handler(progress_handler)
-            if run_task and not run_task.done():
-                run_task.cancel()
-                try:
-                    await run_task
-                except asyncio.CancelledError:
-                    pass
+            if owns_lock and not handed_off:
+                _run_lock.release()
+                progress.unregister_handler(progress_handler)
             if disconnect_task and not disconnect_task.done():
                 disconnect_task.cancel()
 
