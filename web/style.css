@@ -42,17 +42,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
-/* ---------- Birthday note ---------- */
-.banner {
-  display: flex; align-items: center; justify-content: center; gap: 18px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--ink); font-size: 13.5px;
-  padding: 10px 22px; text-align: center;
+/* ---------- Welcome ---------- */
+#welcome-dialog {
+  background: var(--panel-2); color: var(--ink-2);
+  border: 1px solid var(--hairline); border-radius: 14px;
+  padding: 26px 28px; width: min(480px, 92vw); text-align: center;
 }
-.banner::before { content: "●"; color: var(--accent); font-size: 9px; }
-.banner button { background: none; border: none; color: var(--ink-3); cursor: pointer; font-size: 12px; padding: 4px; }
-.banner button:hover { color: var(--ink); }
+#welcome-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+#council-canvas {
+  width: min(380px, 80vw); image-rendering: pixelated;
+  border-radius: 8px; border: 1px solid var(--hairline);
+  display: block; margin: 0 auto 16px;
+}
+#welcome-title { margin: 0 0 10px; color: var(--ink); font-size: 18px; font-weight: 600; }
+.welcome-birthday {
+  margin: 0 0 12px; color: var(--accent); font-size: 14px; font-weight: 500;
+}
+.welcome-lines { text-align: left; display: grid; gap: 8px; margin-bottom: 18px; }
+.welcome-lines p { margin: 0; font-size: 13.5px; line-height: 1.6; }
+#welcome-enter { width: 100%; padding: 11px; font-size: 13.5px; }
 
 /* ---------- Top bar ---------- */
 .topbar {

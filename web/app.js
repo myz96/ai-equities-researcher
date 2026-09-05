@@ -122,17 +122,24 @@ async function init() {
     document.title = config.site_name;
     $("crest-mark").textContent = config.site_name
       .split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-    if (config.birthday_message && !localStorage.getItem("birthdaySeen")) {
-      $("birthday-text").textContent = config.birthday_message;
-      $("birthday-banner").classList.remove("hidden");
+    if (!localStorage.getItem("tc_welcomed")) {
+      $("welcome-title").textContent = `Welcome to ${config.site_name}`;
+      if (config.birthday_message) {
+        $("welcome-birthday").textContent = config.birthday_message;
+        $("welcome-birthday").classList.remove("hidden");
+      }
+      drawCouncil($("council-canvas"));
+      const dialog = $("welcome-dialog");
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
     }
   } catch (e) {
     console.error("init failed", e);
   }
 
-  $("banner-close").addEventListener("click", () => {
-    $("birthday-banner").classList.add("hidden");
-    localStorage.setItem("birthdaySeen", "1");
+  $("welcome-enter").addEventListener("click", () => {
+    localStorage.setItem("tc_welcomed", "1");
+    $("welcome-dialog").close();
   });
   $("search-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1141,6 +1148,57 @@ function fmtPrice(v) {
 function fmtPct(v) { return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`; }
 function shortDate(ts) {
   return new Date(ts).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+}
+
+/* ---------- pixel council ---------- */
+function drawCouncil(canvas) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); };
+  const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+
+  // Back wall + a tiny market chart and the house plaque
+  rect(0, 0, W, H, "#15181b");
+  rect(6, 5, 13, 8, "#0f1113");
+  rect(6, 5, 13, 1, "#2a2e33");
+  rect(6, 12, 13, 1, "#2a2e33");
+  [[7, 10, 2, "#31a86c"], [10, 8, 4, "#31a86c"], [13, 9, 3, "#e05252"], [16, 7, 5, "#31a86c"]]
+    .forEach(([x, y, h, c]) => rect(x, y, 2, h, c));
+  rect(Math.floor(W / 2) - 4, 4, 8, 5, "#0f1113");
+  rect(Math.floor(W / 2) - 3, 5, 6, 3, "#c9a24b");
+
+  // The council table
+  const tableY = 24;
+  rect(8, tableY, W - 16, 4, "#5d4426");
+  rect(8, tableY, W - 16, 1, "#7a5c35");
+  rect(10, tableY + 4, 2, 4, "#3e2d18");
+  rect(W - 12, tableY + 4, 2, 4, "#3e2d18");
+
+  const skins = ["#e8b48c", "#c68e63", "#8c5a3b", "#f0c8a0", "#a06a45"];
+  const suits = ["#2c3e50", "#3b3b3b", "#4a3728", "#26413c", "#54494b", "#333a56"];
+  const hairs = ["#1a1a1a", "#6f6b60", "#e8e4da", null, "#7a4a2b", "#3d3d3d"]; // null = bald
+
+  function figure(x, y, i, facingAway) {
+    const skin = skins[i % skins.length];
+    const suit = suits[(i * 3 + 1) % suits.length];
+    const hair = hairs[(i * 5 + 2) % hairs.length];
+    rect(x, y + 3, 5, 4, suit);            // shoulders / body
+    px(x, y + 3, "#15181b"); px(x + 4, y + 3, "#15181b"); // round the shoulders
+    rect(x + 1, y, 3, 3, facingAway ? (hair || skin) : skin); // head
+    if (hair) rect(x + 1, y, 3, 1, hair);  // hair on top
+    if (!facingAway && (i % 4 === 0)) { px(x + 1, y + 1, "#111"); px(x + 3, y + 1, "#111"); } // glasses dots
+  }
+
+  // Seven legends behind the table, five in front with their backs to us,
+  // one at each end — fourteen at the table.
+  for (let i = 0; i < 7; i++) figure(11 + i * 8, tableY - 8, i, false);
+  for (let i = 0; i < 5; i++) figure(15 + i * 9, tableY + 3, i + 7, true);
+  figure(2, tableY - 4, 12, false);
+  figure(W - 7, tableY - 4, 13, false);
+
+  // Papers on the table
+  for (let i = 0; i < 5; i++) px(14 + i * 9, tableY + 1, "#e7e9ec");
 }
 
 function el(tag, className, text) {

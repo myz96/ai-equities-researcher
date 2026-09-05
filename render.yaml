@@ -17,7 +17,7 @@ services:
       - key: FEEDBACK_EMAIL
         value: michael.yj.zhao@gmail.com
       - key: MODEL_NAME
-        value: anthropic/claude-sonnet-5
+        value: qwen/qwen3.7-flash
       - key: MODEL_PROVIDER
         value: OpenRouter
       - key: DATA_PROVIDER

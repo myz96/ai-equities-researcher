@@ -11,10 +11,20 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2210%22 fill=%22%230B0C0E%22/><text x=%2232%22 y=%2243%22 font-size=%2230%22 text-anchor=%22middle%22 fill=%22%23E7E9EC%22 font-family=%22-apple-system,sans-serif%22 font-weight=%22600%22>TC</text></svg>" />
 </head>
 <body>
-  <div id="birthday-banner" class="banner hidden">
-    <span id="birthday-text"></span>
-    <button id="banner-close" aria-label="Close">✕</button>
-  </div>
+  <dialog id="welcome-dialog">
+    <canvas id="council-canvas" width="76" height="40" aria-label="The committee at its table"></canvas>
+    <h3 id="welcome-title">Welcome to the desk</h3>
+    <p id="welcome-birthday" class="welcome-birthday hidden"></p>
+    <div class="welcome-lines">
+      <p>Type any stock's ticker and the committee convenes: fourteen legendary
+         investors — and anyone you add — each study it and cast a vote.</p>
+      <p>They argue. A devil's advocate attacks whatever they agree on. Then the
+         committee hands down its verdict.</p>
+      <p>Every call is remembered and graded against what the market actually did —
+         so over time, you learn exactly who deserves your trust.</p>
+    </div>
+    <button id="welcome-enter" class="btn-brass">Enter the desk</button>
+  </dialog>
 
   <header class="topbar">
     <a class="brand" href="#/">
