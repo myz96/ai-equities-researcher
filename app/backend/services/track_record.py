@@ -20,7 +20,7 @@ from src.tools import yfinance_api
 HORIZON_DAYS = 30
 FLAT_BAND = 0.02
 MIN_GRADED_FOR_PROMPT = 3  # one unlucky call must not discredit a member
-EXCLUDED = ("risk_management", "debate_room", "portfolio_manager")
+EXCLUDED = ("risk_management", "debate_room", "portfolio_manager", "troll_")
 
 
 def _utc_today() -> date:

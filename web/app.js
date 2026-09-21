@@ -71,9 +71,13 @@ function saveBench() {
 }
 
 function activeRoster() {
-  const builtins = Object.values(ANALYSTS).filter((a) => !a.custom && !BENCHED.includes(a.key)).map((a) => a.key);
+  const builtins = Object.values(ANALYSTS)
+    .filter((a) => !a.custom && a.type !== "troll" && !BENCHED.includes(a.key)).map((a) => a.key);
   const customs = PERSONAS.filter((p) => !BENCHED.includes(`custom_${p.id}`));
-  return { builtins, customs };
+  const trolls = Object.values(ANALYSTS)
+    .filter((a) => a.type === "troll" && !BENCHED.includes(a.key))
+    .map((a) => a.key.replace(/^troll_/, ""));
+  return { builtins, customs, trolls };
 }
 
 async function migrateLocalIfNeeded() {
@@ -428,8 +432,8 @@ function paintCommittee() {
   const stage = $("stage");
   stage.innerHTML = "";
 
-  const { builtins, customs } = activeRoster();
-  const activeCount = builtins.length + customs.length;
+  const { builtins, customs, trolls } = activeRoster();
+  const activeCount = builtins.length + customs.length + trolls.length;
 
   const head = el("div", "tkr-head");
   head.appendChild(el("span", "tk", "The Committee"));
@@ -441,8 +445,9 @@ function paintCommittee() {
   stage.appendChild(head);
 
   const sections = [
-    ["THE LEGENDS", Object.values(ANALYSTS).filter((a) => !a.custom && !a.key.endsWith("_analyst"))],
-    ["THE QUANT DESK", Object.values(ANALYSTS).filter((a) => !a.custom && a.key.endsWith("_analyst"))],
+    ["THE LEGENDS", Object.values(ANALYSTS).filter((a) => !a.custom && a.type !== "troll" && !a.key.endsWith("_analyst"))],
+    ["THE QUANT DESK", Object.values(ANALYSTS).filter((a) => !a.custom && a.type !== "troll" && a.key.endsWith("_analyst"))],
+    ["THE PEANUT GALLERY", Object.values(ANALYSTS).filter((a) => a.type === "troll")],
   ];
   for (const [title, members] of sections) {
     stage.appendChild(eyebrow(title));
@@ -493,7 +498,9 @@ function memberCard(m) {
   card.appendChild(el("div", "record-line", record || "No graded calls yet"));
 
   const actions = el("div", "member-actions");
-  const toggle = el("button", "btn-quiet", benched ? "Benched" : "Active");
+  const isTrollMember = m.type === "troll";
+  const toggle = el("button", "btn-quiet",
+    isTrollMember ? (benched ? "Silenced" : "Heckling") : (benched ? "Benched" : "Active"));
   toggle.classList.toggle("toggled-off", benched);
   toggle.title = "The committee needs at least one active member";
   toggle.addEventListener("click", () => {
@@ -512,7 +519,9 @@ function memberCard(m) {
   });
   actions.appendChild(toggle);
 
-  if (m.custom) {
+  if (m.type === "troll") {
+    // The gallery cannot be edited or forked — only silenced.
+  } else if (m.custom) {
     const edit = el("button", "btn-quiet", "Edit");
     edit.addEventListener("click", () => openPersonaEditor(m.persona));
     const del = el("button", "btn-quiet danger", "Delete");
@@ -739,7 +748,7 @@ async function runAnalysis(ticker) {
   }, 5000);
 
   try {
-    const { builtins, customs } = activeRoster();
+    const { builtins, customs, trolls } = activeRoster();
     const response = await fetch("/analyze/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -749,6 +758,7 @@ async function runAnalysis(ticker) {
         model_name: $("model-select").value || undefined,
         analysts: builtins,
         custom_analysts: customs,
+        trolls,
       }),
     });
     if (!response.ok) {
@@ -826,7 +836,9 @@ function noteView(rec) {
   const ticker = data.ticker;
   const wrap = el("div", "");
   const decision = decisionOf(data);
-  const entries = collectSignals(data.analyst_signals || {}, ticker, data.custom_roster || {});
+  const allEntries = collectSignals(data.analyst_signals || {}, ticker, data.custom_roster || {});
+  const entries = allEntries.filter((e) => !e.isTroll); // the gallery is heard, never counted
+  const gallery = allEntries.filter((e) => e.isTroll);
 
   // hero: stamp + thesis | tally
   const hero = el("div", "note-hero");
@@ -885,7 +897,17 @@ function noteView(rec) {
   const personaGrid = el("div", "card-grid");
   main.appendChild(personaGrid);
 
-  rail.appendChild(eyebrow("III · THE QUANT DESK"));
+  if (gallery.length) {
+    main.appendChild(eyebrow("III · THE PEANUT GALLERY"));
+    const galleryGrid = el("div", "card-grid");
+    const galleryNote = el("p", "gallery-note",
+      "Also present, uninvited. Their views count for nothing and are recorded anyway.");
+    main.appendChild(galleryNote);
+    main.appendChild(galleryGrid);
+    renderPlaques(gallery, galleryGrid, galleryGrid);
+  }
+
+  rail.appendChild(eyebrow("IV · THE QUANT DESK"));
   const quantGrid = el("div", "");
   rail.appendChild(quantGrid);
   rail.appendChild(eyebrow("THE RECORD"));
@@ -954,6 +976,7 @@ function collectSignals(signals, ticker, roster = {}) {
       configKey,
       snapshotName: snapshot?.name,
       snapshotEpithet: snapshot?.epithet,
+      isTroll: configKey.startsWith("troll_"),
       isQuant: configKey.endsWith(QUANT_SUFFIX) || configKey === "news_sentiment",
       signal: String(entry.signal || "neutral").toLowerCase(),
       confidence: Number(entry.confidence || 0),
@@ -970,7 +993,7 @@ function renderPlaques(entries, personaGrid, quantGrid) {
     const meta = ANALYSTS[entry.configKey] || {};
     const name = entry.snapshotName || meta.display_name || displayName(entry.agentKey);
     const epithet = meta.description || entry.snapshotEpithet || "";
-    const card = el("div", `analyst-card sig-${entry.signal}`);
+    const card = el("div", `analyst-card sig-${entry.signal}${entry.isTroll ? " troll-card" : ""}`);
     card.style.setProperty("--stagger", `${Math.min(index++, 12) * 40}ms`);
 
     const head = el("div", "head");

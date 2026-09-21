@@ -119,10 +119,12 @@ def create_workflow(selected_analysts=None, custom_personas=None):
         workflow.add_node(node_name, node_func)
         workflow.add_edge("start_node", node_name)
 
-    # Add user-authored committee members
+    # Add user-authored committee members (and gallery trolls, whose troll_
+    # prefix keeps them out of every aggregate downstream)
     custom_node_names = []
     for persona in custom_personas or []:
-        node_name = f"custom_{persona['id']}_agent"
+        prefix = "troll" if persona.get("troll") else "custom"
+        node_name = f"{prefix}_{persona['id']}_agent"
         workflow.add_node(node_name, partial(custom_analyst_agent, agent_id=node_name, persona=persona))
         workflow.add_edge("start_node", node_name)
         custom_node_names.append(node_name)

@@ -57,7 +57,7 @@ def portfolio_management_agent(state: AgentState, agent_id: str = "portfolio_man
         track_records = state["data"].get("track_records") or {}
         ticker_signals = {}
         for agent, signals in analyst_signals.items():
-            if not agent.startswith("risk_management_agent") and ticker in signals:
+            if not agent.startswith(("risk_management_agent", "troll_")) and ticker in signals:
                 sig = signals[ticker].get("signal")
                 conf = signals[ticker].get("confidence")
                 if sig is not None and conf is not None:
@@ -174,6 +174,8 @@ def _compact_signals(signals_by_ticker: dict[str, dict]) -> dict[str, dict]:
             conf = payload.get("conf") if "conf" in payload else payload.get("confidence")
             if sig is not None and conf is not None:
                 compact[agent] = {"sig": sig, "conf": conf}
+                if payload.get("record"):  # proven track record informs the weighing
+                    compact[agent]["record"] = payload["record"]
         out[t] = compact
     return out
 

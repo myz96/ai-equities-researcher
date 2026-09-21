@@ -14,6 +14,7 @@ from app.backend.models.events import CompleteEvent, ErrorEvent, ProgressUpdateE
 from app.backend.routes.desk import save_note
 from app.backend.services.graph import parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
+from src.agents.trolls import TROLL_IDS, TROLLS
 from src.llm.models import AVAILABLE_MODELS
 from src.main import create_workflow
 from src.utils.analysts import ANALYST_CONFIG
@@ -79,12 +80,13 @@ class AnalyzeRequest(BaseModel):
     model_provider: str | None = None
     analysts: list[str] | None = None  # builtin keys; None = all
     custom_analysts: list[CustomPersona] | None = Field(default=None, max_length=10)
+    trolls: list[str] | None = None  # gallery ids to seat; None = all
 
 
 @router.get("/analysts")
 def list_analysts():
     """Metadata for every analyst, used by the report UI to render cards."""
-    return [
+    builtins = [
         {
             "key": key,
             "display_name": config["display_name"],
@@ -95,6 +97,18 @@ def list_analysts():
         }
         for key, config in ANALYST_CONFIG.items()
     ]
+    gallery = [
+        {
+            "key": f"troll_{spec['id']}",
+            "display_name": spec["name"],
+            "description": spec["epithet"],
+            "investing_style": spec["philosophy"],
+            "type": "troll",
+            "order": 90 + i,
+        }
+        for i, spec in enumerate(TROLLS)
+    ]
+    return builtins + gallery
 
 
 @router.post("/run")
@@ -133,6 +147,11 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
         p["id"] = "".join(c for c in p["id"] if c.isalnum() or c == "_")[:48] or "member"
     if selected == [] and not customs:
         selected = None  # never run an empty committee
+
+    # Seat the gallery: heard in their own section, never counted anywhere.
+    wanted_trolls = TROLL_IDS if request_data.trolls is None else [
+        t for t in request_data.trolls if t in TROLL_IDS]
+    customs += [{**spec, "troll": True} for spec in TROLLS if spec["id"] in wanted_trolls]
 
     portfolio = create_portfolio(100000.0, 0.0, [ticker])
     graph = create_workflow(selected, custom_personas=customs).compile()

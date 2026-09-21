@@ -42,7 +42,7 @@ def debate_room_agent(state: AgentState, agent_id: str = "debate_room_agent"):
         views = []
         counts = {"bullish": 0, "bearish": 0, "neutral": 0}
         for agent, signals in analyst_signals.items():
-            if agent.startswith(("risk_management", "debate_room")):
+            if agent.startswith(("risk_management", "debate_room", "troll_")):
                 continue
             if ticker not in signals:
                 continue
