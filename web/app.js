@@ -915,6 +915,11 @@ function noteView(rec) {
   metaRow(meta, "Note dated", shortDate(rec.created_at || Date.now()));
   metaRow(meta, "Window", `${data.start_date} → ${data.end_date}`);
   metaRow(meta, "Brain", String(data.model_name || "").split("/").pop());
+  const audit = data.data_audit;
+  if (audit) {
+    metaRow(meta, "Financials", audit.ttm_through ? `TTM to ${audit.ttm_through}` : (audit.latest_annual || "none"));
+    if (audit.warnings && audit.warnings.length) metaRow(meta, "Data warning", audit.warnings[0]);
+  }
   const cost = rec.run_cost ?? data.run_cost;
   if (cost != null) metaRow(meta, "Cost", `$${Number(cost).toFixed(2)}`);
   rail.appendChild(meta);

@@ -15,6 +15,7 @@ from app.backend.routes.desk import save_note
 from app.backend.services.graph import parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.agents.trolls import TROLL_IDS, TROLLS
+from src.tools import yfinance_api
 from src.llm.models import AVAILABLE_MODELS
 from src.main import create_workflow
 from src.utils.analysts import ANALYST_CONFIG
@@ -226,6 +227,8 @@ async def analyze(request_data: AnalyzeRequest, request: Request):
                                       for p in customs},
                     "decisions": parse_hedge_fund_response(result.get("messages", [])[-1].content),
                     "analyst_signals": result.get("data", {}).get("analyst_signals", {}),
+                    # What the committee actually saw: statement periods and data age.
+                    "data_audit": yfinance_api.get_data_audit(ticker),
                 }
 
             def hand_off_orphan():

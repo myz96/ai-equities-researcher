@@ -186,14 +186,132 @@ _CASHFLOW_ROWS = {
 }
 
 
+# Per-ticker record of which statement periods the last load used, so each
+# note can carry a data audit (what the committee actually saw, and how old).
+_DATA_AUDIT: dict[str, dict] = {}
+STALE_AFTER_DAYS = 200
+
+
+def get_data_audit(ticker: str) -> dict | None:
+    return _DATA_AUDIT.get(ticker)
+
+
+def _ttm_column(quarterly, kind: str):
+    """One TTM column from the last four quarters: flows summed, balances latest.
+
+    Returns (timestamp, Series) or None when four clean quarters are absent.
+    """
+    if quarterly is None or quarterly.empty:
+        return None
+    cols = sorted(quarterly.columns, reverse=True)
+    if kind == "balance":
+        return cols[0], quarterly[cols[0]]
+    if len(cols) < 4:
+        return None
+    last4 = quarterly[cols[:4]]
+    # A row counts only when all four quarters report it; partial sums lie.
+    summed = last4.sum(axis=1, min_count=4)
+    return cols[0], summed
+
+
 def _load_statements(ticker: str):
+    """Annual statements, with a TTM column prepended when quarters are newer.
+
+    Annual-only data goes stale fast: a company with a fiscal year ending in
+    August shows 14-month-old earnings by October, so P/E and growth computed
+    from it are badly wrong in a fast cycle (Micron 2026: P/E 113 vs a true
+    11.5). The TTM column gives every agent the latest trailing twelve months
+    as its newest data point; the annual history stays behind it.
+    """
     tkr = yf.Ticker(ticker)
     try:
         income, balance, cashflow = tkr.income_stmt, tkr.balance_sheet, tkr.cashflow
     except Exception as e:
         logger.warning("yfinance statements fetch failed for %s: %s", ticker, e)
+        _DATA_AUDIT[ticker] = {"ticker": ticker, "error": f"statements fetch failed: {e}"}
         return tkr, None, None, None
+
+    latest_annual = None
+    for df in (income, balance):
+        if df is not None and not df.empty:
+            top = max(df.columns)
+            latest_annual = top if latest_annual is None else max(latest_annual, top)
+
+    audit = {
+        "ticker": ticker,
+        "latest_annual": latest_annual.date().isoformat() if latest_annual is not None else None,
+        "ttm_through": None,
+        "ttm_source": None,
+        "warnings": [],
+    }
+
+    try:
+        q_income, q_balance, q_cash = tkr.quarterly_income_stmt, tkr.quarterly_balance_sheet, tkr.quarterly_cashflow
+    except Exception as e:
+        q_income = q_balance = q_cash = None
+        audit["warnings"].append(f"quarterly fetch failed: {e}")
+
+    ttm_income = _ttm_column(q_income, "flow")
+    if ttm_income and (latest_annual is None or ttm_income[0] > latest_annual):
+        stamp = ttm_income[0]
+        income = _with_column(income, stamp, ttm_income[1])
+        ttm_cash = _ttm_column(q_cash, "flow")
+        if ttm_cash:
+            cashflow = _with_column(cashflow, stamp, ttm_cash[1])
+        ttm_bal = _ttm_column(q_balance, "balance")
+        if ttm_bal:
+            balance = _with_column(balance, stamp, ttm_bal[1])
+        audit["ttm_through"] = stamp.date().isoformat()
+        audit["ttm_source"] = "sum of last 4 quarterly statements"
+
+        # Yahoo's statement tables lag its own headline TTM figures by a
+        # quarter at times; when info is newer, trust info for the three
+        # headline numbers the committee leans on hardest.
+        info = _info(tkr)
+        mrq = info.get("mostRecentQuarter")
+        if isinstance(mrq, (int, float)):
+            mrq_date = datetime.datetime.fromtimestamp(mrq, tz=datetime.timezone.utc).date()
+            if mrq_date > stamp.date():
+                for label, key in (("Net Income", "netIncomeToCommon"),
+                                   ("Net Income Common Stockholders", "netIncomeToCommon"),
+                                   ("Diluted EPS", "trailingEps"),
+                                   ("Total Revenue", "totalRevenue")):
+                    value = _safe(info.get(key))
+                    if value is not None and label in income.index:
+                        income.loc[label, stamp] = value
+                audit["ttm_source"] += f"; headline NI/EPS/revenue from Yahoo info (through {mrq_date})"
+                audit["ttm_through"] = mrq_date.isoformat()
+
+    newest = audit["ttm_through"] or audit["latest_annual"]
+    if newest:
+        age = (datetime.date.today() - datetime.date.fromisoformat(newest)).days
+        audit["newest_data_age_days"] = age
+        if age > STALE_AFTER_DAYS:
+            audit["warnings"].append(f"newest financials are {age} days old")
+    else:
+        audit["warnings"].append("no financial statements available")
+
+    for warning in audit["warnings"]:
+        logger.warning("data quality %s: %s", ticker, warning)
+    logger.info("data audit %s: annual=%s ttm=%s (%s)", ticker,
+                audit["latest_annual"], audit["ttm_through"], audit["ttm_source"])
+    _DATA_AUDIT[ticker] = audit
     return tkr, income, balance, cashflow
+
+
+def _with_column(df, stamp, series):
+    """Copy of df with series added as the column `stamp`, newest first."""
+    import pandas as pd
+
+    if df is None or df.empty:
+        return pd.DataFrame({stamp: series})
+    out = df.copy()
+    out[stamp] = series.reindex(out.index)
+    # Rows only the quarterly table knows about join too.
+    extra = series.index.difference(out.index)
+    if len(extra):
+        out = pd.concat([out, pd.DataFrame({stamp: series.loc[extra]})])
+    return out[sorted(out.columns, reverse=True)]
 
 
 def _report_periods(income, balance, end_date: str) -> list:
