@@ -100,6 +100,11 @@
     "provider": "OpenRouter"
   },
   {
+    "display_name": "[OpenRouter] Claude Opus 5.5",
+    "model_name": "anthropic/claude-opus-5.5",
+    "provider": "OpenRouter"
+  },
+  {
     "display_name": "[OpenRouter] Claude Fable 5.1",
     "model_name": "anthropic/claude-fable-5.1",
     "provider": "OpenRouter"
@@ -107,6 +112,11 @@
   {
     "display_name": "[OpenRouter] GPT-6 Astra",
     "model_name": "openai/gpt-6-astra",
+    "provider": "OpenRouter"
+  },
+  {
+    "display_name": "[OpenRouter] GPT-6.1 Sol",
+    "model_name": "openai/gpt-6.1-sol",
     "provider": "OpenRouter"
   }
 ]
